@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { activities, activityType } from '../data/library';
 import Flashcard from './Flashcard';
 
-export default function ReviewForm({ item, topicId, onSave, onDelete }) {
-  const [type, setType] = useState(item ? activityType(item) : 'recall');
+export default function ReviewForm({ item, topicId, onSave, onDelete, initialType = 'recall' }) {
+  const [type, setType] = useState(item ? activityType(item) : initialType);
   const [question, setQuestion] = useState(item?.question ?? '');
   const [answer, setAnswer] = useState(item?.answer ?? '');
   const choice = type === 'choice';

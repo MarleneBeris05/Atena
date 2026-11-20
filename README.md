@@ -11,7 +11,7 @@ Abre la dirección que indica Vite. `npm run build` genera la versión de produc
 
 ## Ejecutar la API en local
 
-1. Crea una base PostgreSQL vacía y un usuario con permisos para migrarla. Instala las dependencias con `python -m pip install -r backend/requirements.txt` en un entorno virtual.
+1. Crea una base PostgreSQL vacía y un usuario con permisos para migrarla. Usa Python 3.11 o posterior e instala las dependencias con `python -m pip install -r backend/requirements.txt` en un entorno virtual.
 2. Configura `DATABASE_URL`, `SESSION_SECRET` y `ALLOWED_ORIGINS` en el entorno del proceso. [backend/.env.example](backend/.env.example) contiene el formato. Genera un secreto aleatorio con `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Conserva el mismo secreto entre reinicios para mantener activas las sesiones.
 3. Dentro de `backend`, ejecuta `python -m alembic upgrade head` y `python -m uvicorn atena.main:app --host 127.0.0.1 --port 8000`.
 4. En la raíz, copia [.env.example](.env.example) a `.env.local` o configura `VITE_API_URL` en el entorno de Vite. Reinicia `npm run dev` después de cambiarla. Abre el frontend desde un origen exacto de `ALLOWED_ORIGINS`.
@@ -28,6 +28,15 @@ Las pruebas de integración usan PostgreSQL. Instala `backend/requirements-test.
 
 Con la API configurada, abre **Iniciar sesión** y crea una cuenta con correo y contraseña. Guarda «Redes → Topologías» y una flashcard. Recarga la página y comprueba que sigue en el tema. Después, abre la web en otra sesión del navegador o en tu teléfono e inicia sesión con la misma cuenta.
 
+## Generar flashcards con Gemini
+
+1. Configura `GEMINI_API_KEY` y `GEMINI_MODEL` en el entorno del proceso FastAPI. En Render, agrégalas al servicio **atena-api**. En local, usa [backend/.env.example](backend/.env.example) como referencia. Usa `gemini-3.8-flash` como modelo inicial. [Ficha del modelo](https://aistudio.google.com/docs/models/gemini-3.8-flash).
+2. Ejecuta `python -m alembic upgrade head` desde `backend` para crear la tabla de límites por cuenta. Render ejecuta ese comando en el predespliegue.
+3. Inicia sesión y abre **Aprendizaje → Materia → Tema → Generar con IA**. Pega hasta 12 000 caracteres y solicita entre 1 y 10 tarjetas. Atena envía a Gemini el texto pegado y las instrucciones de generación. El límite es de 5 intentos por cuenta cada 10 minutos, incluidos los fallos del proveedor.
+4. Revisa el fragmento citado, edita las preguntas y respuestas y marca las tarjetas que quieras conservar. **Guardar seleccionadas** incorpora ese contenido a tu biblioteca.
+
+Las pruebas automáticas simulan el modelo `gemini-3.8-flash`, incluido el transporte HTTP del SDK oficial. Para verificar una generación real, configura la clave en el backend y usa apuntes de prueba con datos ficticios. La generación se activa al configurar ambas variables. La creación manual funciona de forma independiente.
+
 Inicio calcula las métricas desde el lunes con la fecha local del navegador. Tres intentos con la misma flashcard cuentan como tres intentos y una tarjeta distinta. Las sesiones programadas completadas se contabilizan en el día en que se completan.
 
 ## Datos locales
@@ -40,7 +49,7 @@ Con la sesión abierta, **Aprendizaje → Importar biblioteca local** copia mate
 
 ## Desplegar en Render
 
-1. Usa [render.yaml](render.yaml) como Blueprint. Define un servicio FastAPI, un sitio estático y PostgreSQL 17 con acceso privado. El archivo selecciona planes de pago para la API y PostgreSQL. [Referencia de Blueprints](https://render.com/docs/blueprint-spec).
+1. Usa [render.yaml](render.yaml) como Blueprint. Define un servicio FastAPI con Python 3.13, un sitio estático y PostgreSQL 17 con acceso privado. El archivo selecciona planes de pago para la API y PostgreSQL. [Referencia de Blueprints](https://render.com/docs/blueprint-spec).
 2. En la API, configura `ALLOWED_ORIGINS` con el origen HTTPS del frontend. Separa los orígenes con comas si tienes varios. Render proporciona `DATABASE_URL` desde el PostgreSQL vinculado y genera `SESSION_SECRET`. Ambas variables se usan solo en la API.
 3. En el sitio estático, configura `VITE_API_URL` con la URL pública HTTPS de la API. Vite la incorpora durante `npm run build`, así que vuelve a desplegar el sitio si cambia.
 4. Comprueba que el paso `python -m alembic upgrade head` del predespliegue termina correctamente. En una instalación configurada manualmente, ejecuta ese mismo comando desde `backend` con `DATABASE_URL` apuntando a la base de destino. Render inicia Uvicorn en el `PORT` del servicio. [Guía de FastAPI en Render](https://render.com/docs/deploy-fastapi).

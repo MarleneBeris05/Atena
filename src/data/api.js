@@ -10,6 +10,12 @@ const messages = {
   resource_conflict: 'Ya existe otro registro con ese identificador.',
   invalid_data: 'Revisa los datos. Algún campo está vacío, es demasiado largo o tiene un formato inválido.',
   database_unavailable: 'La biblioteca está temporalmente inaccesible. Inténtalo de nuevo.',
+  generation_limit: 'La generación permite hasta 5 intentos cada 10 minutos. Espera antes de volver a intentarlo.',
+  generation_not_configured: 'La generación con Gemini aún no está configurada. Puedes crear flashcards manualmente.',
+  generation_timeout: 'Gemini tardó demasiado en responder. Puedes volver a intentarlo con estos apuntes.',
+  generation_quota: 'Gemini agotó su cuota. Inténtalo más tarde o crea una flashcard manualmente.',
+  generation_invalid: 'Gemini devolvió borradores inválidos o fragmentos que no aparecen en los apuntes. Inténtalo de nuevo.',
+  generation_unavailable: 'Gemini no pudo generar los borradores. Inténtalo de nuevo o crea una flashcard manualmente.',
 };
 
 export async function api(path, { token, method = 'GET', body, signal } = {}) {
