@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import auth, flashcards, library
+from . import auth, device_pairing, devices, flashcards, library
 from .config import allowed_origins, connection, database_url, session_secret
 
 
@@ -27,12 +27,14 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(library.router)
 app.include_router(flashcards.router)
+app.include_router(device_pairing.router)
+app.include_router(devices.router)
 
 
 @app.middleware("http")
 async def no_sensitive_cache(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(("/auth", "/library")):
+    if request.url.path.startswith(("/auth", "/library", "/devices")) and "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -53,6 +55,7 @@ def health():
     try:
         with connection() as db:
             db.execute("SELECT 1 FROM reviews LIMIT 1")
+            db.execute("SELECT 1 FROM device_decks LIMIT 1")
     except psycopg.Error:
         return JSONResponse({"status": "unavailable"}, status_code=503)
     return {"status": "ok"}
