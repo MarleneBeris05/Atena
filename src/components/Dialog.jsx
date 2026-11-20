@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
-export default function Dialog({ title, onClose, children }) {
+export default function Dialog({ title, onClose, children, busy = false }) {
   const ref = useRef(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog.open) dialog.showModal();
@@ -21,14 +22,15 @@ export default function Dialog({ title, onClose, children }) {
     };
   }, []);
 
-  return <dialog className="window editor-dialog" ref={ref} aria-labelledby="editor-title" onClose={onClose}>
+  return <dialog className="window editor-dialog" ref={ref} aria-labelledby={titleId} onClose={onClose}
+    onCancel={event => { if (busy) event.preventDefault(); }}>
     <div className="window-bar"><span>Edición</span>
-      <button type="button" className="icon-button" aria-label="Cerrar" onClick={() => ref.current.close()}>
+      <button type="button" className="icon-button" aria-label="Cerrar" disabled={busy} onClick={() => ref.current.close()}>
         <X size={20} aria-hidden="true"/>
       </button>
     </div>
     <div className="window-body">
-      <h2 id="editor-title" className="section-title">{title}</h2>
+      <h2 id={titleId} className="section-title">{title}</h2>
       {children}
     </div>
   </dialog>;

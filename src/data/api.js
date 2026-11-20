@@ -1,0 +1,53 @@
+const base = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const sessionKey = 'atena.session.' + base;
+export const hasAccountApi = Boolean(base);
+
+const messages = {
+  authentication_required: 'Tu sesión venció. Vuelve a iniciar sesión para continuar.',
+  invalid_credentials: 'El correo o la contraseña no coinciden.',
+  registration_conflict: 'Ese correo ya está registrado.',
+  resource_not_found: 'El recurso ya no está disponible. Comprueba la biblioteca y vuelve a intentarlo.',
+  resource_conflict: 'Ya existe otro registro con ese identificador.',
+  invalid_data: 'Revisa los datos. Algún campo está vacío, es demasiado largo o tiene un formato inválido.',
+  database_unavailable: 'La biblioteca está temporalmente inaccesible. Inténtalo de nuevo.',
+};
+
+export async function api(path, { token, method = 'GET', body, signal } = {}) {
+  const headers = { Accept: 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+  let response;
+  try {
+    response = await fetch(base + path, {
+      method, headers, signal, cache: 'no-store', credentials: 'omit',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    throw new Error('No pudimos conectar con la API. Revisa tu conexión e inténtalo de nuevo.');
+  }
+  if (response.status === 204) return;
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) {
+    const error = new Error(messages[data?.detail] || 'La API no pudo completar la solicitud. Inténtalo de nuevo.');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+export function readSession() {
+  if (!hasAccountApi) return null;
+  try {
+    const session = JSON.parse(sessionStorage.getItem(sessionKey));
+    return session?.account?.id && session?.account.email && session?.token ? session : null;
+  } catch { return null; }
+}
+
+export function storeSession(session) {
+  try {
+    if (session) sessionStorage.setItem(sessionKey, JSON.stringify(session));
+    else sessionStorage.removeItem(sessionKey);
+  } catch { /* The active tab can still use its in-memory session. */ }
+}
