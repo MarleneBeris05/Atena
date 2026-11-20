@@ -23,7 +23,7 @@ button:disabled { cursor: default; opacity: .65; }
 
 .site-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(86px, .65fr) minmax(0, 1.35fr);
   align-items: center;
   gap: 10px;
   padding: 12px;
@@ -33,6 +33,7 @@ button:disabled { cursor: default; opacity: .65; }
 .brand, h1, h2, .window-bar, .overline { font-family: 'Space Mono', monospace; }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 1.3rem; font-weight: 700; text-decoration: none; }
 .brand svg, .button svg, .site-header nav svg { flex: none; }
+.header-actions { min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .user-profile {
   justify-self: end;
   min-width: 0;
@@ -234,6 +235,8 @@ textarea, select, input:not([type='checkbox']) {
 textarea { resize: vertical; }
 .form-columns { display: grid; }
 fieldset { min-width: 0; border: 1px solid var(--border); margin: 0 0 14px; padding: 8px; }
+.form-controls { border: 0; margin: 0; padding: 0; }
+.library-notice { padding: 12px; margin-bottom: 14px; border: 1px solid var(--border); background: var(--surface); }
 .day-options { display: flex; flex-wrap: wrap; gap: 3px 12px; }
 .day-options label { display: flex; align-items: center; min-height: 44px; margin: 0; }
 .day-options input { width: 18px; height: 18px; accent-color: var(--primary); }
@@ -287,6 +290,6 @@ footer { margin-top: 22px; color: var(--muted); font-size: .8rem; }
   .site-header { grid-template-columns: minmax(130px, 1fr) minmax(0, auto) minmax(130px, 1fr); padding-inline: 32px; }
   .site-header nav { grid-column: 2; grid-row: 1; display: flex; gap: 5px; }
   .site-header nav a { padding-inline: 13px; }
-  .user-profile { grid-column: 3; }
+  .header-actions { grid-column: 3; }
   .library-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

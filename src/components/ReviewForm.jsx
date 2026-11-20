@@ -29,15 +29,15 @@ export default function ReviewForm({ item, topicId, onSave, onDelete }) {
       {Object.entries(activities).filter(([id]) => id !== 'all').map(([id, name]) =>
         <option value={id} key={id}>{name}</option>)}
     </select></label>}
-    {type !== 'flashcard' && <label>Título<input name="name" required pattern=".*\S.*" defaultValue={item?.name}/></label>}
+    {type !== 'flashcard' && <label>Título<input name="name" required maxLength={300} pattern=".*\S.*" defaultValue={item?.name}/></label>}
     <label>{type === 'recall' ? 'Consigna abierta' : 'Pregunta'}
-      <textarea required rows={4} value={question} onChange={event => {
+      <textarea required rows={4} maxLength={24000} value={question} onChange={event => {
         setQuestion(event.target.value);
         event.target.setCustomValidity(event.target.value && !event.target.value.trim() ? 'Escribe una consigna o pregunta.' : '');
       }}/>
     </label>
     {type === 'flashcard' && <>
-      <label>Respuesta<textarea required rows={4} value={answer} onChange={event => {
+      <label>Respuesta<textarea required rows={4} maxLength={24000} value={answer} onChange={event => {
         setAnswer(event.target.value);
         event.target.setCustomValidity(event.target.value && !event.target.value.trim() ? 'Escribe una respuesta.' : '');
       }}/></label>
