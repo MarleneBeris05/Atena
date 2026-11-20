@@ -30,12 +30,14 @@ Con la API configurada, abre **Iniciar sesión** y crea una cuenta con correo y 
 
 ## Generar flashcards con Gemini
 
-1. Configura `GEMINI_API_KEY` y `GEMINI_MODEL` en el entorno del proceso FastAPI. En Render, agrégalas al servicio **atena-api**. En local, usa [backend/.env.example](backend/.env.example) como referencia. Usa `gemini-3.8-flash` como modelo inicial. [Ficha del modelo](https://aistudio.google.com/docs/models/gemini-3.8-flash).
+1. Configura `GEMINI_API_KEY` y `GEMINI_MODEL` en el entorno del proceso FastAPI. En Render, agrégalas al servicio **atena-api**. En local, usa [backend/.env.example](backend/.env.example) como referencia. El modelo inicial es `gemini-3.5-flash-lite`. [Ficha del modelo](https://aistudio.google.com/docs/models/gemini-3.5-flash-lite).
 2. Ejecuta `python -m alembic upgrade head` desde `backend` para crear la tabla de límites por cuenta. Render ejecuta ese comando en el predespliegue.
 3. Inicia sesión y abre **Aprendizaje → Materia → Tema → Generar con IA**. Pega hasta 12 000 caracteres y solicita entre 1 y 10 tarjetas. Atena envía a Gemini el texto pegado y las instrucciones de generación. El límite es de 5 intentos por cuenta cada 10 minutos, incluidos los fallos del proveedor.
 4. Revisa el fragmento citado, edita las preguntas y respuestas y marca las tarjetas que quieras conservar. **Guardar seleccionadas** incorpora ese contenido a tu biblioteca.
 
-Las pruebas automáticas simulan el modelo `gemini-3.8-flash`, incluido el transporte HTTP del SDK oficial. Para verificar una generación real, configura la clave en el backend y usa apuntes de prueba con datos ficticios. La generación se activa al configurar ambas variables. La creación manual funciona de forma independiente.
+Las pruebas automáticas simulan el modelo `gemini-3.5-flash-lite`, incluido el transporte HTTP del SDK oficial. Para verificar una generación real, configura la clave en el backend y usa apuntes de prueba con datos ficticios. La generación se activa al configurar ambas variables. La creación manual funciona de forma independiente.
+
+Si los logs indican `http_status=503 provider_status=UNAVAILABLE`, Gemini informó que el servicio no estaba disponible. Cada solicitud de Atena realiza un intento. Si el fallo persiste en `gemini-3.8-flash`, prueba `gemini-3.5-flash-lite` cambiando `GEMINI_MODEL` en **atena-api → Environment** de Render y vuelve a desplegar la API. Comprueba el cambio con apuntes ficticios antes de usarlo con material de estudio. [Errores de la API de Gemini](https://aistudio.google.com/docs/api-errors).
 
 Inicio calcula las métricas desde el lunes con la fecha local del navegador. Tres intentos con la misma flashcard cuentan como tres intentos y una tarjeta distinta. Las sesiones programadas completadas se contabilizan en el día en que se completan.
 
