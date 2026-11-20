@@ -48,16 +48,25 @@ class GeminiTransportTest(unittest.TestCase):
             ("quota", (503, "generation_quota"), "http_status=429"),
         ]:
             def mock_client(**options):
-                options["http_options"].client_args = {"transport": transport(behavior)}
+                http_options = options["http_options"]
+                self.assertEqual(http_options.timeout, 60_000)
+                self.assertEqual(http_options.retry_options.attempts, 1)
+                http_options.client_args = {"transport": transport(behavior)}
                 return original_client(**options)
 
             with self.subTest(behavior=behavior), patch("atena.gemini.genai.Client", side_effect=mock_client):
                 previous = len(requests)
                 if expected:
-                    with self.assertLogs("atena.gemini", level="WARNING") as logs, self.assertRaises(HTTPException) as error:
+                    with (
+                        patch("atena.gemini.time") as clock,
+                        self.assertLogs("atena.gemini", level="WARNING") as logs,
+                        self.assertRaises(HTTPException) as error,
+                    ):
+                        clock.monotonic.side_effect = [10.0, 10.5]
                         request_drafts(NOTES, 5, "test-key", MODEL)
                     self.assertEqual((error.exception.status_code, error.exception.detail), expected)
                     self.assertIn(diagnostic, logs.records[0].getMessage())
+                    self.assertIn(f"model={MODEL} elapsed_ms=500", logs.records[0].getMessage())
                     self.assertNotIn("simulated", logs.output[0])
                 else:
                     self.assertEqual(json.loads(request_drafts(NOTES, 5, "test-key", MODEL)), {"drafts": [STAR]})
@@ -89,11 +98,16 @@ class GeminiTransportTest(unittest.TestCase):
                 return original_client(**options)
 
             with self.subTest(status=status), patch("atena.gemini.genai.Client", side_effect=mock_client):
-                with self.assertLogs("atena.gemini", level="WARNING") as logs, self.assertRaises(HTTPException) as error:
+                with (
+                    patch("atena.gemini.time") as clock,
+                    self.assertLogs("atena.gemini", level="WARNING") as logs,
+                    self.assertRaises(HTTPException) as error,
+                ):
+                    clock.monotonic.side_effect = [10.0, 10.125]
                     request_drafts("private-notes", 5, "test-key", MODEL)
                 self.assertEqual((error.exception.status_code, error.exception.detail), (502, "generation_unavailable"))
                 self.assertEqual([record.getMessage() for record in logs.records], [
-                    f"Gemini API error: http_status=403 provider_status={expected_status} model={MODEL}",
+                    f"Gemini API error: http_status=403 provider_status={expected_status} model={MODEL} elapsed_ms=125",
                 ])
                 self.assertIsNone(logs.records[0].exc_info)
 
