@@ -14,6 +14,7 @@ const messages = {
   generation_not_configured: 'La generación con Gemini aún no está configurada. Puedes crear flashcards manualmente.',
   generation_timeout: 'Gemini tardó demasiado en responder. Puedes volver a intentarlo con estos apuntes.',
   generation_quota: 'Gemini agotó su cuota. Inténtalo más tarde o crea una flashcard manualmente.',
+  generation_provider_unavailable: 'Gemini no está disponible en este momento. Tus apuntes se conservan. Inténtalo más tarde o crea una flashcard manualmente.',
   generation_invalid: 'Gemini devolvió borradores inválidos o fragmentos que no aparecen en los apuntes. Inténtalo de nuevo.',
   generation_unavailable: 'Gemini no pudo generar los borradores. Inténtalo de nuevo o crea una flashcard manualmente.',
 };

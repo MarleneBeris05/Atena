@@ -60,6 +60,8 @@ def request_drafts(notes: str, count: int, key: str, model: str) -> str:
             raise HTTPException(504, "generation_timeout") from None
         if error.code == 429:
             raise HTTPException(503, "generation_quota") from None
+        if error.code == 503:
+            raise HTTPException(503, "generation_provider_unavailable") from None
         raise HTTPException(502, "generation_unavailable") from None
     except TransportError as error:
         logger.warning(

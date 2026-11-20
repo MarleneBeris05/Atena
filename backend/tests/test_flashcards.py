@@ -11,7 +11,7 @@ from atena.gemini import request_drafts
 
 
 TEST_DATABASE = os.getenv("ATENA_TEST_DATABASE_URL")
-MODEL = "gemini-3.8-flash"
+MODEL = "gemini-3.5-flash-lite"
 NOTES = "La estrella usa un conmutador. En una red de bus todos comparten el mismo medio."
 STAR = {"question": "¿Qué usa una topología en estrella?", "answer": "Un conmutador.",
         "source": "La estrella usa un conmutador."}
@@ -34,6 +34,8 @@ class GeminiTransportTest(unittest.TestCase):
                 if behavior == "quota":
                     return Response(429, json={"error": {"code": 429, "message": "simulated",
                                                         "status": "RESOURCE_EXHAUSTED"}})
+                if behavior == "unavailable":
+                    return Response(503, json={"error": {"code": 503, "message": "simulated", "status": "UNAVAILABLE"}})
                 return Response(200, json={"candidates": [{"finishReason": "STOP", "content": {
                     "role": "model", "parts": [{"text": json.dumps({"drafts": [STAR]})}],
                 }}]})
@@ -46,6 +48,7 @@ class GeminiTransportTest(unittest.TestCase):
             ("timeout", (504, "generation_timeout"), "exception_type=ReadTimeout"),
             ("transport", (502, "generation_unavailable"), "exception_type=ConnectError"),
             ("quota", (503, "generation_quota"), "http_status=429"),
+            ("unavailable", (503, "generation_provider_unavailable"), "http_status=503 provider_status=UNAVAILABLE"),
         ]:
             def mock_client(**options):
                 http_options = options["http_options"]
