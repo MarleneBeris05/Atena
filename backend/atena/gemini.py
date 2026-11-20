@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 
 from fastapi import HTTPException
 from google import genai
@@ -33,10 +34,11 @@ def request_drafts(notes: str, count: int, key: str, model: str) -> str:
         "Conserva sus acentos, signos y espacios. Evita repetir conceptos. "
         "Si los apuntes no respaldan suficientes tarjetas, devuelve menos o una lista vacía."
     )
+    started = time.monotonic()
     try:
         with genai.Client(
             api_key=key, enterprise=False,
-            http_options=types.HttpOptions(timeout=25_000, retry_options=types.HttpRetryOptions(attempts=1)),
+            http_options=types.HttpOptions(timeout=60_000, retry_options=types.HttpRetryOptions(attempts=1)),
         ) as client:
             response = client.models.generate_content(
                 model=model, contents=notes,
@@ -50,14 +52,20 @@ def request_drafts(notes: str, count: int, key: str, model: str) -> str:
         status = error.status
         if not isinstance(status, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", status):
             status = "-"
-        logger.warning("Gemini API error: http_status=%s provider_status=%s model=%s", error.code, status, model)
+        logger.warning(
+            "Gemini API error: http_status=%s provider_status=%s model=%s elapsed_ms=%d",
+            error.code, status, model, round((time.monotonic() - started) * 1000),
+        )
         if error.code in (408, 504):
             raise HTTPException(504, "generation_timeout") from None
         if error.code == 429:
             raise HTTPException(503, "generation_quota") from None
         raise HTTPException(502, "generation_unavailable") from None
     except TransportError as error:
-        logger.warning("Gemini transport error: exception_type=%s", type(error).__name__)
+        logger.warning(
+            "Gemini transport error: exception_type=%s model=%s elapsed_ms=%d",
+            type(error).__name__, model, round((time.monotonic() - started) * 1000),
+        )
         if isinstance(error, TimeoutException):
             raise HTTPException(504, "generation_timeout") from None
         raise HTTPException(502, "generation_unavailable") from None
