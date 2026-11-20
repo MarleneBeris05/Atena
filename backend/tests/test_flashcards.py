@@ -5,7 +5,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from google import genai
-from httpx2 import MockTransport, ReadTimeout, Response
+from httpx2 import ConnectError, MockTransport, ReadTimeout, Response
 
 from atena.gemini import request_drafts
 
@@ -29,6 +29,8 @@ class GeminiTransportTest(unittest.TestCase):
                 requests.append(request)
                 if behavior == "timeout":
                     raise ReadTimeout("simulated", request=request)
+                if behavior == "transport":
+                    raise ConnectError("simulated", request=request)
                 if behavior == "quota":
                     return Response(429, json={"error": {"code": 429, "message": "simulated",
                                                         "status": "RESOURCE_EXHAUSTED"}})
@@ -39,8 +41,12 @@ class GeminiTransportTest(unittest.TestCase):
 
         from fastapi import HTTPException
 
-        for behavior, expected in [("success", None), ("timeout", (504, "generation_timeout")),
-                                   ("quota", (503, "generation_quota"))]:
+        for behavior, expected, diagnostic in [
+            ("success", None, None),
+            ("timeout", (504, "generation_timeout"), "exception_type=ReadTimeout"),
+            ("transport", (502, "generation_unavailable"), "exception_type=ConnectError"),
+            ("quota", (503, "generation_quota"), "http_status=429"),
+        ]:
             def mock_client(**options):
                 options["http_options"].client_args = {"transport": transport(behavior)}
                 return original_client(**options)
@@ -48,9 +54,11 @@ class GeminiTransportTest(unittest.TestCase):
             with self.subTest(behavior=behavior), patch("atena.gemini.genai.Client", side_effect=mock_client):
                 previous = len(requests)
                 if expected:
-                    with self.assertRaises(HTTPException) as error:
+                    with self.assertLogs("atena.gemini", level="WARNING") as logs, self.assertRaises(HTTPException) as error:
                         request_drafts(NOTES, 5, "test-key", MODEL)
                     self.assertEqual((error.exception.status_code, error.exception.detail), expected)
+                    self.assertIn(diagnostic, logs.records[0].getMessage())
+                    self.assertNotIn("simulated", logs.output[0])
                 else:
                     self.assertEqual(json.loads(request_drafts(NOTES, 5, "test-key", MODEL)), {"drafts": [STAR]})
                 self.assertEqual(len(requests), previous + 1)
@@ -63,6 +71,31 @@ class GeminiTransportTest(unittest.TestCase):
         schema = payload["generationConfig"]["responseJsonSchema"]
         self.assertEqual(schema["properties"]["drafts"]["maxItems"], 5)
         self.assertIn("español", payload["systemInstruction"]["parts"][0]["text"])
+
+    def test_logs_original_http_status_without_provider_details(self):
+        from fastapi import HTTPException
+
+        original_client = genai.Client
+        details = "provider-message private-notes private-model-response test-key private-header"
+        for status, expected_status in [("PERMISSION_DENIED", "PERMISSION_DENIED"), (None, "-")]:
+            def mock_client(**options):
+                def handle(_request):
+                    payload = {"code": 400, "message": details}
+                    if status is not None:
+                        payload["status"] = status
+                    return Response(403, json={"error": payload}, headers={"X-Debug": "private-header"})
+
+                options["http_options"].client_args = {"transport": MockTransport(handle)}
+                return original_client(**options)
+
+            with self.subTest(status=status), patch("atena.gemini.genai.Client", side_effect=mock_client):
+                with self.assertLogs("atena.gemini", level="WARNING") as logs, self.assertRaises(HTTPException) as error:
+                    request_drafts("private-notes", 5, "test-key", MODEL)
+                self.assertEqual((error.exception.status_code, error.exception.detail), (502, "generation_unavailable"))
+                self.assertEqual([record.getMessage() for record in logs.records], [
+                    f"Gemini API error: http_status=403 provider_status={expected_status} model={MODEL}",
+                ])
+                self.assertIsNone(logs.records[0].exc_info)
 
 
 @unittest.skipUnless(TEST_DATABASE, "Set ATENA_TEST_DATABASE_URL to a migrated test database")
