@@ -1,14 +1,25 @@
 # Atena
 
-Interfaz modular en React y Vite.
+Atena es un asistente de estudio. La aplicación web usa React y Vite y guarda la biblioteca en el navegador.
 
 ```sh
 npm install
 npm run dev
 ```
 
-`npm run build` genera la versión de producción. Las variables globales de color están en `src/styles.css`.
+Abre la dirección que indica Vite. `npm run build` genera la versión de producción.
 
-La navegación utiliza rutas hash: `#/inicio`, `#/temas`, `#/repasos`, `#/planes` y `#/dispositivo`.
+## Recorrido de estudio
 
-Los temas, repasos, planes, perfil, historial de actividad y preparación del dispositivo se guardan en localStorage con claves `repasito.v2.*`. El calendario muestra sesiones reales respondidas, incluidas las respuestas incorrectas. Los días se calculan con la fecha local del navegador. Los datos se conservan al recargar en el mismo navegador y origen (incluido el puerto); borrar los datos del sitio los elimina. La integración con base de datos y dispositivo físico está pendiente.
+1. En **Aprendizaje**, crea la materia «Redes» y el tema «Topologías». Añade una flashcard y un repaso de recuerdo activo desde el tema.
+2. En **Repasos**, elige la materia, el tema o el tipo de actividad. Revela la respuesta de una flashcard y marca «La recordé» o «Repasar». También puedes practicar las preguntas de opción múltiple.
+3. En **Planes**, programa una actividad eligiendo tema, días, hora local y duración. Abre la próxima sesión desde **Inicio**. Tras responder a todas las actividades, pulsa «Completar sesión programada» para registrarla como completada.
+4. En **Dispositivo**, prepara una copia local del material. La disponibilidad en el ESP32 requiere confirmación del equipo. La sincronización física está pendiente.
+
+Inicio calcula las métricas desde el lunes con la fecha local del navegador. Tres intentos con la misma flashcard cuentan como tres intentos y una tarjeta distinta. Las sesiones programadas completadas se contabilizan en el día en que se completan.
+
+## Datos locales
+
+La aplicación conserva los datos `repasito.v2.*` y sus identificadores. La ruta `#/temas` abre Aprendizaje. Los temas anteriores aparecen en «Por asignar». Puedes cambiar su materia en «Editar tema». Los planes antiguos conservan los días guardados y admiten una hora al editarlos. Si una instalación antigua usaba los temas o preguntas de ejemplo sin haberlos guardado, se recuperan al encontrar datos de la biblioteca, la agenda o el historial anteriores.
+
+Los intentos antiguos se vinculan a su pregunta cuando coinciden el tema y el título y hay una sola coincidencia. El historial y el calendario conservan los intentos con coincidencias ambiguas. El navegador conserva los datos al recargar en el mismo origen, incluido el puerto. Borrar los datos del sitio elimina la biblioteca y el historial locales.

@@ -1,4 +1,0 @@
-import React from 'react';
-import Window from './Window';
-export default function Recommendations({ onReview }) {return <Window title="SIGUIENTE.RECOMENDADO" className="recommendations"><div className="section-heading"><h2>Para seguir creciendo</h2><span>PARA TI</span></div>{[['Biología celular','Compara mitocondrias y cloroplastos.','2 errores en tu último repaso','Practicar 5 tarjetas'],['Álgebra','Refuerza ecuaciones de primer grado.','45% de dominio · prioridad alta','Crear repaso guiado'],['Revolución francesa','Ordena los hechos de 1789 a 1799.','Tu próximo paso para consolidar','Practicar cronología']].map(([name,description,note,action])=><article className="recommendation" key={name}><strong>{name}</strong><p>{description}</p><small>{note}</small><button onClick={()=>onReview(name)}>{action} →</button></article>)}</Window>}
-

@@ -1,3 +1,19 @@
 import React from 'react';
-import {dateKey} from '../data/study';
-export default function Stats({topics,reviews,sessions}){const mastery=topics.length?Math.round(topics.reduce((sum,t)=>sum+t.progress,0)/topics.length):0;const dates=new Set(sessions.map(s=>s.date));let streak=0;const cursor=new Date();if(!dates.has(dateKey(cursor)))cursor.setDate(cursor.getDate()-1);while(dates.has(dateKey(cursor))){streak++;cursor.setDate(cursor.getDate()-1)}return <div className="stats"><div className="stat primary-stat"><div><span>Dominio global</span><strong>{mastery}<small>%</small></strong></div><svg viewBox="0 0 100 45" aria-hidden="true"><path d="M2 38 C12 -7 22 1 34 22 S54 39 60 18 S78 20 98 4"/></svg></div>{[[sessions.length,'repasos completados','Cada sesión cuenta'],[`${streak} días`,'de racha','Un poquito cada día'],[reviews.length,'repasos disponibles','Listos para practicar']].map(([value,label,note])=><div className="stat" key={label}><span className="spark">✦</span><strong>{value}</strong><b>{label}</b><small>{note}</small></div>)}</div>}
+import { weeklyStats } from '../data/library';
+
+export default function Stats({ attempts, completed, now }) {
+  const week = weeklyStats(attempts, completed, now);
+  return <section aria-labelledby="week-title">
+    <h2 id="week-title" className="section-title">¿Cómo voy esta semana?</h2>
+    <div className="stats">
+      {[
+        [week.days, 'Días con actividad'],
+        [week.cards, 'Tarjetas distintas practicadas'],
+        [week.attempts, 'Intentos de práctica'],
+        [week.completed, 'Sesiones programadas completadas'],
+      ].map(([value, label]) => <div className="stat" key={label}>
+        <strong>{value}</strong><span>{label}</span>
+      </div>)}
+    </div>
+  </section>;
+}

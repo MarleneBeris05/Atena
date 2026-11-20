@@ -1,37 +1,221 @@
-import React,{useEffect,useState} from 'react';
-import {Plus,Play,X} from 'lucide-react';
-import Header,{routes} from './components/Header';
-import Stats from './components/Stats';
-import Topics from './components/Topics';
-import Companion from './components/Companion';
+import React, { useEffect, useRef, useState } from 'react';
+import Header, { routes } from './components/Header';
+import Dialog from './components/Dialog';
 import ReviewForm from './components/ReviewForm';
-import Window from './components/Window';
-import ActivityCalendar from './components/ActivityCalendar';
+import HomePage from './pages/HomePage';
+import LearningPage from './pages/LearningPage';
+import PracticePage from './pages/PracticePage';
 import PlansPage from './pages/PlansPage';
+import DevicePage from './pages/DevicePage';
 import useLocalStorage from './hooks/useLocalStorage';
-import {initialTopics,initialReviews,dateKey} from './data/study';
-const getPage=()=>Object.values(routes).includes(location.hash.slice(2))?location.hash.slice(2):'inicio';
-export default function App(){
-const [topics,setTopics,topicError]=useLocalStorage('repasito.v2.topics',initialTopics);
-const [reviews,setReviews,reviewError]=useLocalStorage('repasito.v2.reviews',initialReviews);
-const [sessions,setSessions,sessionError]=useLocalStorage('repasito.v2.sessions',[]);
-const [plans,setPlans,planError]=useLocalStorage('repasito.v2.plans',[]);
-const [user,setUser,userError]=useLocalStorage('repasito.v2.user',{name:'Ana'});
-const [device,setDevice,deviceError]=useLocalStorage('repasito.v2.device',{queued:false});
-const [page,setPage]=useState(getPage),[dialog,setDialog]=useState(null),[toast,setToast]=useState(''),[answer,setAnswer]=useState(null),[now,setNow]=useState(new Date());
-useEffect(()=>{const change=()=>{setPage(getPage());window.scrollTo(0,0)};addEventListener('hashchange',change);const timer=setInterval(()=>setNow(new Date()),30000);return()=>{removeEventListener('hashchange',change);clearInterval(timer)}},[]);
-useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(timer)},[toast]);
-const notify=message=>setToast(message);const review=item=>{setAnswer(null);setDialog({type:'review',item})};
-const topicReview=name=>{const topic=topics.find(t=>t.name===name),item=reviews.find(r=>r.topicId===topic?.id);if(item)review(item);else{location.hash='/repasos';notify('Crea una pregunta para este tema antes de practicar.')}};
-const submitAnswer=index=>{if(answer!==null)return;setAnswer(index);const item=dialog.item;setSessions(old=>[...old,{id:crypto.randomUUID(),date:dateKey(),timestamp:new Date().toISOString(),topicId:item.topicId,topicName:topics.find(t=>t.id===item.topicId)?.name||'Tema',reviewName:item.name,correct:index===item.correct}]);setTopics(old=>old.map(t=>t.id===item.topicId?{...t,progress:Math.min(100,t.progress+(index===item.correct?10:0)),status:index===item.correct?'En práctica':t.status}:t))};
-const deleteTopic=id=>{setTopics(old=>old.filter(t=>t.id!==id));setReviews(old=>old.filter(r=>r.topicId!==id));setPlans(old=>old.filter(p=>p.topicId!==id));notify('Tema eliminado. El historial de actividad se conserva.')};
-const titles={inicio:['Tu memoria, en orden.',`Hola, ${user.name}. Un pequeño repaso hoy, un gran avance mañana.`],temas:['Tu biblioteca de conocimiento.','Organiza tus temas de programación, Linux y redes.'],repasos:['Practica. Recuerda. Avanza.','Crea tus preguntas y pon a prueba lo que has aprendido.'],planes:['Un plan que va contigo.','Descubre métodos de estudio y construye una rutina a tu medida.'],dispositivo:['Tu compañero de estudio.','Prepara tus tarjetas para llevarlas contigo.']};
-const storageError=topicError||reviewError||sessionError||planError||userError||deviceError;
-return <><Header active={page} user={user} onProfile={()=>setDialog({type:'profile'})}/><main id={page}><div className="hero"><div><div className="eyebrow">/USR/ATENA · {now.toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).toUpperCase()}</div><h1>{titles[page][0]}</h1><p>{titles[page][1]}</p></div>{page==='inicio'&&<button className="button solid" disabled={!reviews.length} onClick={()=>review(reviews[0])}><Play size={14}/>Empezar a repasar</button>}{page==='temas'&&<button className="button solid" onClick={()=>setDialog({type:'topic'})}><Plus size={15}/>Crear tema</button>}</div>{storageError&&<p role="alert" className="storage-error">{storageError}</p>}
-{page==='inicio'&&<><Stats topics={topics} reviews={reviews} sessions={sessions}/><div className="home-grid"><Window title="HOY.ENFOQUE"><div className="section-heading"><h2>Tu siguiente paso</h2><a href="#/repasos">Ver todos →</a></div>{reviews.slice(0,3).map(item=><div className="focus-row" key={item.id}><span className="topic-symbol">⌘</span><div><strong>{item.name}</strong><small>{topics.find(t=>t.id===item.topicId)?.name} · Recuperación activa</small></div><button className="button" onClick={()=>review(item)}>Repasar →</button></div>)}{!reviews.length&&<p>Crea tu primer repaso en la página Repasos.</p>}<div className="home-tip"><span>✦ UN PASO A LA VEZ</span><p>No necesitas hacerlo todo hoy. Empieza con una pregunta y vuelve mañana.</p><a href="#/planes">Organizar mi estudio →</a></div></Window><ActivityCalendar sessions={sessions}/></div></>}
-{page==='temas'&&<><Topics topics={topics.map(t=>({...t,cards:reviews.filter(r=>r.topicId===t.id).length}))} onCreate={()=>setDialog({type:'topic'})} onReview={topicReview} onEdit={topic=>setDialog({type:'topic',topic})} onDelete={deleteTopic}/><div className="topic-detail-grid">{topics.map(topic=><Window key={topic.id} title={`${topic.name.toUpperCase()}.RUTA`}><h2>{topic.name}</h2><p>{topic.description||'Añade preguntas para empezar a aprender.'}</p><div className="topic-detail-footer"><span>{sessions.filter(s=>s.topicId===topic.id).length} sesiones realizadas</span><button className="button" onClick={()=>topicReview(topic.name)}>Practicar →</button></div></Window>)}</div></>}
-{page==='repasos'&&<div className="reviews-layout"><ReviewForm topics={topics} onCreate={item=>{setReviews(old=>[...old,{...item,id:crypto.randomUUID()}]);notify('Repaso guardado localmente.')}}/><Window title="BIBLIOTECA.REPASOS"><div className="section-heading"><h2>Tus repasos</h2><span>{reviews.length} GUARDADOS</span></div>{reviews.map(item=><article className="review-list-item" key={item.id}><div><strong>{item.name}</strong><small>{topics.find(t=>t.id===item.topicId)?.name}</small><p>{item.question}</p></div><div className="review-actions"><button className="button solid" onClick={()=>review(item)}>Practicar</button><button className="text-button" onClick={()=>setReviews(old=>old.filter(r=>r.id!==item.id))}>Eliminar</button></div></article>)}{!reviews.length&&<p>Aún no tienes repasos. Crea tu primera pregunta.</p>}</Window></div>}
-{page==='planes'&&<PlansPage topics={topics} plans={plans} setPlans={setPlans} sessions={sessions} notify={notify}/>}
-{page==='dispositivo'&&<div className="device-layout"><Companion topicName={topics[0]?.name||'Sin tema'} queued={device.queued} synced={false} onSync={()=>{setDevice({queued:true,preparedAt:new Date().toISOString()});notify('Tarjetas preparadas localmente. La conexión física aún no está disponible.')}}/><Window title="DISPOSITIVO.COLA"><h2>Cola de tarjetas</h2><p>La integración con el dispositivo estará disponible al conectar el servicio. Puedes preparar tus repasos en este navegador.</p><div className="device-status">○ Sin dispositivo conectado</div>{reviews.map(item=><div className="queue-item" key={item.id}><strong>{item.name}</strong><span>{device.queued?'Preparado localmente':'Pendiente de preparar'}</span></div>)}{device.preparedAt&&<p>Última preparación: {new Date(device.preparedAt).toLocaleString('es-MX')}</p>}</Window></div>}
-<footer><span>✦ PEQUEÑOS PASOS · GRANDES AVANCES</span><span>{storageError?'Guardado local no disponible':'Guardado en este navegador · Tus datos permanecen al recargar'}</span></footer></main>{toast&&<div className="toast" role="status">{toast}</div>}
-{dialog&&<div className="modal-backdrop" onClick={()=>setDialog(null)} onKeyDown={e=>{if(e.key==='Escape')setDialog(null)}}><section className="modal window" role="dialog" aria-modal="true" aria-label={dialog.type==='review'?'Repasar':dialog.type==='profile'?'Editar perfil':'Editar tema'} onClick={e=>e.stopPropagation()}><div className="window-bar"><span>{dialog.type.toUpperCase()}.TXT</span><button autoFocus aria-label="Cerrar" onClick={()=>setDialog(null)}><X size={16}/></button></div><div className="window-body">{dialog.type==='profile'?<form onSubmit={e=>{e.preventDefault();setUser({name:new FormData(e.currentTarget).get('name').trim()||'Estudiante'});setDialog(null)}}><h2>Tu perfil</h2><label>Nombre<input name="name" required maxLength={35} defaultValue={user.name}/></label><button className="button solid">Guardar perfil</button></form>:dialog.type==='topic'?<form onSubmit={e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));if(dialog.topic)setTopics(old=>old.map(t=>t.id===dialog.topic.id?{...t,...data}:t));else setTopics(old=>[...old,{...data,id:crypto.randomUUID(),progress:0,status:'Por descubrir',time:'A tu ritmo'}]);setDialog(null);notify('Tema guardado localmente.')}}><h2>{dialog.topic?'Editar tema':'Un nuevo tema por descubrir'}</h2><label>Nombre<input name="name" required defaultValue={dialog.topic?.name}/></label><label>Categoría<input name="category" required defaultValue={dialog.topic?.category}/></label><label>Qué quieres aprender<textarea name="description" rows={3} defaultValue={dialog.topic?.description}/></label><button className="button solid">Guardar tema</button></form>:<><div className="eyebrow">RECUPERACIÓN ACTIVA</div><h2>{dialog.item.name}</h2><p className="question">{dialog.item.question}</p>{dialog.item.options.map((option,index)=><button className={`answer button ${answer!==null&&index===dialog.item.correct?'correct':''} ${answer===index&&index!==dialog.item.correct?'incorrect':''}`} key={index} disabled={answer!==null} onClick={()=>submitAnswer(index)}>{option}</button>)}{answer!==null&&<div className="answer-feedback" role="status"><strong>{answer===dialog.item.correct?'¡Correcto!':'Sigue practicando.'}</strong><p>{dialog.item.explanation}</p><small>Sesión registrada en tu calendario.</small><button className="button solid" onClick={()=>setDialog(null)}>Finalizar repaso</button></div>}</>}</div></section></div>}</>}
+import { dateKey, initialReviews, initialTopics } from './data/study';
+import { activityType, findLegacyReviewId, itemName, learningPath, nextOccurrence, subjectId, unassigned } from './data/library';
+
+const titles = {
+  inicio: 'Inicio', aprendizaje: 'Aprendizaje', repasos: 'Repasos', planes: 'Planes', dispositivo: 'Dispositivo',
+};
+
+function readRoute() {
+  const hash = location.hash;
+  const separator = hash.indexOf('?');
+  const path = (separator < 0 ? hash : hash.slice(0, separator)).replace(/^#\/?/, '');
+  const query = new URLSearchParams(separator < 0 ? '' : hash.slice(separator + 1));
+  const [section, ...segments] = path.split('/');
+  const page = section === 'temas' ? 'aprendizaje' : routes.includes(section) ? section : 'inicio';
+  const ids = segments.map(segment => {
+    try { return decodeURIComponent(segment); }
+    catch { return segment; }
+  });
+  return { page, ids, query, hash };
+}
+
+function assignLegacyTopics(topics) {
+  return topics.some(topic => !topic.subjectId)
+    ? topics.map(topic => topic.subjectId ? topic : { ...topic, subjectId: unassigned.id })
+    : topics;
+}
+
+function usedLegacyLibrary() {
+  const read = (key, fallback) => {
+    try { return JSON.parse(localStorage.getItem('repasito.v2.' + key)) ?? fallback; }
+    catch { return fallback; }
+  };
+  const some = (key, predicate) => {
+    const entries = read(key, []);
+    return Array.isArray(entries) && entries.some(predicate);
+  };
+  return some('topics', topic => !topic.subjectId)
+    || some('reviews', item => !item.type)
+    || some('plans', plan => !plan.days)
+    || some('sessions', entry => !Object.hasOwn(entry, 'reviewId'))
+    || read('device', {}).queued === true;
+}
+
+export default function App() {
+  const [legacyLibrary] = useState(usedLegacyLibrary);
+  const [savedSubjects, setSubjects, subjectsError] = useLocalStorage('repasito.v2.subjects', []);
+  const [topics, setTopics, topicsError] = useLocalStorage('repasito.v2.topics', legacyLibrary ? initialTopics : [], assignLegacyTopics, legacyLibrary);
+  const defaultItems = legacyLibrary ? initialReviews.filter(item => topics.some(topic => topic.id === item.topicId)) : [];
+  const [items, setItems, itemsError] = useLocalStorage('repasito.v2.reviews', defaultItems, undefined, legacyLibrary);
+  const [attempts, setAttempts, attemptsError] = useLocalStorage('repasito.v2.sessions', [], history => {
+    if (history.every(entry => Object.hasOwn(entry, 'reviewId'))) return history;
+    return history.map(entry => Object.hasOwn(entry, 'reviewId') ? entry : {
+      ...entry, reviewId: findLegacyReviewId(entry, items), type: entry.type || 'choice',
+    });
+  });
+  const [plans, setPlans, plansError] = useLocalStorage('repasito.v2.plans', []);
+  const [completed, setCompleted, completedError] = useLocalStorage('repasito.v2.completedPlans', []);
+  const [user, setUser, userError] = useLocalStorage('repasito.v2.user', { name: 'Estudiante' });
+  const [device, setDevice, deviceError] = useLocalStorage('repasito.v2.device', {});
+  const [route, setRoute] = useState(readRoute);
+  const [editor, setEditor] = useState(null);
+  const [toast, notify] = useState('');
+  const [now, setNow] = useState(() => new Date());
+  const heading = useRef(null);
+  const editorTrigger = useRef(null);
+
+  useEffect(() => {
+    const change = () => {
+      setRoute(readRoute());
+      setEditor(null);
+      setNow(new Date());
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => heading.current?.focus({ preventScroll: true }));
+    };
+    addEventListener('hashchange', change);
+    const timer = setInterval(() => setNow(new Date()), 15000);
+    return () => {
+      removeEventListener('hashchange', change);
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => notify(''), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const { page, ids, query, hash } = route;
+  const subjects = topics.some(topic => subjectId(topic) === unassigned.id) ? [...savedSubjects, unassigned] : savedSubjects;
+  const subject = subjects.find(entry => entry.id === ids[0]);
+  const topic = topics.find(entry => entry.id === ids[1] && subjectId(entry) === subject?.id);
+  const next = nextOccurrence(plans.filter(plan => topics.some(entry => entry.id === plan.topicId)), completed, now);
+  const storageError = subjectsError || topicsError || itemsError || attemptsError || plansError || completedError || userError || deviceError;
+
+  const openEditor = value => {
+    editorTrigger.current = document.activeElement;
+    setEditor(value);
+  };
+  const closeEditor = () => {
+    setEditor(null);
+    requestAnimationFrame(() => editorTrigger.current?.focus());
+  };
+  const saveEntry = (setEntries, previous, values) => {
+    const entry = { ...previous, ...values, id: previous?.id || crypto.randomUUID() };
+    setEntries(old => previous ? old.map(item => item.id === previous.id ? entry : item) : [...old, entry]);
+    return entry;
+  };
+  const removeContent = matches => {
+    setItems(previous => previous.filter(item => !matches(item)));
+    if (device.items?.some(matches)) {
+      setDevice(previous => ({ ...previous, items: previous.items.filter(item => !matches(item)) }));
+    }
+  };
+  const deleteTopic = target => {
+    if (!window.confirm('¿Eliminar este tema, sus actividades y sus planes? El historial se conservará.')) return;
+    setTopics(previous => previous.filter(entry => entry.id !== target.id));
+    setPlans(previous => previous.filter(entry => entry.topicId !== target.id));
+    removeContent(item => item.topicId === target.id);
+    location.hash = learningPath(subjectId(target) === unassigned.id ? undefined : subjectId(target));
+    closeEditor();
+    notify('Tema eliminado.');
+  };
+
+  const recordAttempt = (item, target, result, occurrence) => {
+    const timestamp = new Date();
+    const attempt = {
+      id: crypto.randomUUID(), date: dateKey(timestamp), timestamp: timestamp.toISOString(),
+      topicId: target.id, topicName: target.name, reviewId: item.id, reviewName: itemName(item),
+      type: activityType(item), occurrenceId: occurrence?.id, ...result,
+    };
+    setAttempts(old => [...old, attempt]);
+  };
+  const completePlan = (occurrence, count) => {
+    const timestamp = new Date();
+    setCompleted(old => old.some(entry => entry.id === occurrence.id) ? old : [...old, {
+      id: occurrence.id, planId: occurrence.plan.id, topicId: occurrence.plan.topicId,
+      planName: occurrence.plan.name,
+      scheduledAt: occurrence.start.toISOString(), date: dateKey(timestamp), timestamp: timestamp.toISOString(), attempts: count,
+    }]);
+  };
+
+  const editorTitles = {
+    profile: 'Editar perfil', subject: editor?.subject ? 'Editar materia' : 'Crear materia',
+    topic: editor?.topic ? 'Editar tema' : 'Crear tema', item: editor?.item ? 'Editar contenido' : 'Añadir contenido',
+  };
+
+  return <>
+    <Header active={page} user={user} onProfile={() => openEditor({ type: 'profile' })}/>
+    <main id={page}>
+      <h1 ref={heading} tabIndex={-1}>{titles[page]}</h1>
+      {storageError && <p role="alert" className="storage-error">{storageError}</p>}
+      {page === 'inicio' && <HomePage subjects={subjects} topics={topics} items={items} attempts={attempts}
+        completed={completed} next={next} now={now} onCreate={() => openEditor({ type: 'subject' })}/>}
+      {page === 'aprendizaje' && <LearningPage subjects={subjects} topics={topics} items={items} subject={subject}
+        topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor}/>}
+      {page === 'repasos' && <PracticePage key={hash} subjects={subjects} topics={topics} items={items} plans={plans}
+        completed={completed} query={query} onAttempt={recordAttempt} onComplete={completePlan}/>}
+      {page === 'planes' && <PlansPage subjects={subjects} topics={topics} plans={plans} setPlans={setPlans}
+        attempts={attempts} completed={completed} now={now} notify={notify}/>}
+      {page === 'dispositivo' && <DevicePage items={items} device={device} onPrepare={() => {
+        setDevice(previous => ({ ...previous, items, preparedAt: new Date().toISOString() }));
+        notify('Material preparado en este navegador.');
+      }}/>}
+      <footer>Tus datos se guardan en este navegador.</footer>
+    </main>
+    {toast && <div className="toast" role="status">{toast}</div>}
+    {editor && <Dialog title={editorTitles[editor.type]} onClose={closeEditor}>
+      {editor.type === 'item' ? <ReviewForm item={editor.item} topicId={editor.topic.id} onSave={values => {
+        saveEntry(setItems, editor.item, values);
+        closeEditor();
+        notify('Contenido guardado.');
+      }} onDelete={() => {
+        if (!window.confirm('¿Eliminar este contenido? El historial se conservará.')) return;
+        removeContent(item => item.id === editor.item.id);
+        closeEditor();
+        notify('Contenido eliminado.');
+      }}/> : <form onSubmit={event => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(event.currentTarget));
+        values.name = values.name.trim();
+        if (editor.type === 'profile') setUser(previous => ({ ...previous, name: values.name }));
+        if (editor.type === 'subject') {
+          const entry = saveEntry(setSubjects, editor.subject, values);
+          location.hash = learningPath(entry.id);
+        }
+        if (editor.type === 'topic') {
+          const entry = saveEntry(setTopics, editor.topic, values);
+          location.hash = learningPath(entry.subjectId, entry.id);
+        }
+        closeEditor();
+        notify({ profile: 'Perfil guardado.', subject: 'Materia guardada.', topic: 'Tema guardado.' }[editor.type]);
+      }}>
+        {editor.type === 'topic' && <label>Materia<select name="subjectId" required defaultValue={editor.topic
+          ? subjectId(editor.topic) : editor.subject?.id}>
+          {subjects.map(entry => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
+        </select></label>}
+        <label>Nombre<input name="name" required pattern=".*\S.*" maxLength={editor.type === 'profile' ? 35 : undefined}
+          defaultValue={editor.type === 'profile' ? user.name : (editor.topic || editor.subject)?.name}/></label>
+        {editor.type !== 'profile' && <label>Descripción (opcional)
+          <textarea name="description" rows={3} defaultValue={(editor.topic || editor.subject)?.description}/>
+        </label>}
+        <div className="actions">
+          <button className="button solid">{editor.type === 'subject' ? 'Guardar materia'
+            : editor.type === 'topic' ? 'Guardar tema' : 'Guardar perfil'}</button>
+          {editor.topic && <button type="button" className="button" onClick={() => deleteTopic(editor.topic)}>Eliminar tema</button>}
+        </div>
+      </form>}
+    </Dialog>}
+  </>;
+}

@@ -1,4 +1,28 @@
 import React from 'react';
-import {Gamepad2,House,Library,RotateCcw,CalendarDays,Monitor} from 'lucide-react';
-export const routes={Inicio:'inicio',Temas:'temas',Repasos:'repasos','Planes de estudio':'planes',Dispositivo:'dispositivo'};
-export default function Header({active,user,onProfile}){return <header><a className="brand" href="#/inicio"><Gamepad2 size={25}/>Atena</a><nav aria-label="Navegación principal">{[[House,'Inicio'],[Library,'Temas'],[RotateCcw,'Repasos'],[CalendarDays,'Planes de estudio'],[Monitor,'Dispositivo']].map(([Icon,label])=><a key={label} href={`#/${routes[label]}`} className={active===routes[label]?'nav-active':''} aria-current={active===routes[label]?'page':undefined}><Icon size={16}/>{label}</a>)}</nav><button className="user-profile" onClick={onProfile} aria-label="Editar perfil"><span className="avatar">{user.name.slice(0,2).toUpperCase()}</span><span><strong>{user.name}</strong><small><i/>Perfil local</small></span><span>⌄</span></button></header>}
+import { Gamepad2, House, Library, RotateCcw, CalendarDays, Monitor } from 'lucide-react';
+
+const sections = [
+  [House, 'Inicio', 'inicio'],
+  [Library, 'Aprendizaje', 'aprendizaje'],
+  [RotateCcw, 'Repasos', 'repasos'],
+  [CalendarDays, 'Planes', 'planes'],
+  [Monitor, 'Dispositivo', 'dispositivo'],
+];
+
+export const routes = sections.map(([, , route]) => route);
+
+export default function Header({ active, user, onProfile }) {
+  return <header className="site-header">
+    <a className="brand" href="#/inicio"><Gamepad2 size={25} aria-hidden="true"/>Atena</a>
+    <button className="user-profile" onClick={onProfile} aria-label="Editar perfil">
+      <span className="avatar" aria-hidden="true">{user.name.slice(0, 2).toUpperCase()}</span>
+      <span><strong>{user.name}</strong><small>Perfil local</small></span>
+    </button>
+    <nav aria-label="Navegación principal">
+      {sections.map(([Icon, label, route]) => <a key={route} href={'#/' + route}
+        className={active === route ? 'nav-active' : ''} aria-current={active === route ? 'page' : undefined}>
+        <Icon size={18} aria-hidden="true"/>{label}
+      </a>)}
+    </nav>
+  </header>;
+}
