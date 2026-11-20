@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../data/api';
+import { mergeById } from './useLocalLibrary';
 
 export default function useAccountLibrary(token) {
   const [library, setLibrary] = useState(null);
@@ -49,6 +50,15 @@ export default function useAccountLibrary(token) {
       const result = await api('/library/import', { token, method: 'POST', body: value });
       setLibrary(result.library);
       return result;
+    },
+    generateFlashcards(topicId, body) {
+      return api('/library/topics/' + encodeURIComponent(topicId) + '/flashcard-drafts', { token, method: 'POST', body });
+    },
+    async saveFlashcards(topicId, cards) {
+      const saved = await api('/library/topics/' + encodeURIComponent(topicId) + '/flashcards', {
+        token, method: 'POST', body: { cards },
+      });
+      setLibrary(previous => ({ ...previous, reviews: mergeById(previous.reviews, saved) }));
     },
   };
 }

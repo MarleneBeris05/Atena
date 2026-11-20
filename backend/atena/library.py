@@ -68,29 +68,31 @@ def known_import_id(db, owner, table, entry_id):
     """, (owner, table, entry_id)).fetchone() is not None
 
 
+def create_entry(db, owner, table, entry):
+    current = select_entries(db, owner, table, entry["id"])
+    if current and current[0] == entry:
+        return entry
+    if current or known_import_id(db, owner, table, entry["id"]):
+        raise HTTPException(409, "resource_conflict")
+    if not parent_exists(db, owner, table, entry):
+        raise HTTPException(404, "resource_not_found")
+    insert_entry(db, owner, table, entry)
+    return entry
+
+
 def save_entry(db, owner, table, payload, entry_id=None):
     lock_account(db, owner)
     entry = payload.model_dump()
-    requested_id = entry["id"]
-    current = select_entries(db, owner, table, requested_id)
     if entry_id is None:
-        if current:
-            if current[0] == entry:
-                return entry
-            raise HTTPException(409, "resource_conflict")
-        if known_import_id(db, owner, table, requested_id):
-            raise HTTPException(409, "resource_conflict")
-    elif entry_id != requested_id or not current:
+        return create_entry(db, owner, table, entry)
+    if entry_id != entry["id"] or not select_entries(db, owner, table, entry_id):
         raise HTTPException(404, "resource_not_found")
     if not parent_exists(db, owner, table, entry):
         raise HTTPException(404, "resource_not_found")
-    if entry_id is None:
-        insert_entry(db, owner, table, entry)
-    else:
-        fields, values = values_for(table, entry)
-        assignments = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(field)) for field in fields)
-        statement = sql.SQL("UPDATE {} SET {} WHERE owner_id = %s AND id = %s").format(sql.Identifier(table), assignments)
-        db.execute(statement, (*values, owner, entry_id))
+    fields, values = values_for(table, entry)
+    assignments = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(field)) for field in fields)
+    statement = sql.SQL("UPDATE {} SET {} WHERE owner_id = %s AND id = %s").format(sql.Identifier(table), assignments)
+    db.execute(statement, (*values, owner, entry_id))
     return entry
 
 

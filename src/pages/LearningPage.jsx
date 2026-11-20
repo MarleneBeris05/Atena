@@ -4,7 +4,7 @@ import Window from '../components/Window';
 import Flashcard from '../components/Flashcard';
 import { activities, activityType, itemName, learningPath, practicePath, subjectId, unassigned } from '../data/library';
 
-export default function LearningPage({ subjects, topics, items, subject, topic, invalid, onEdit }) {
+export default function LearningPage({ subjects, topics, items, subject, topic, invalid, onEdit, canGenerate }) {
   const visibleSubjects = subjects.filter(entry => entry.id !== unassigned.id || topics.some(t => subjectId(t) === entry.id));
   const relevantTopics = subject ? topics.filter(t => subjectId(t) === subject.id) : [];
   const content = topic ? items.filter(item => item.topicId === topic.id) : [];
@@ -26,7 +26,9 @@ export default function LearningPage({ subjects, topics, items, subject, topic, 
         <div><h2>{topic.name}</h2>{topic.description && <p>{topic.description}</p>}</div>
         <div className="actions">
           <button className="button" onClick={() => openEditor('topic', { topic })}>Editar tema</button>
-          <button className="button solid" onClick={() => openEditor('item', { topic })}><Plus size={17}/>Añadir contenido</button>
+          <button className="button" onClick={() => openEditor('item', { topic })}>Añadir contenido</button>
+          <button className="button solid" onClick={() => openEditor('item', { topic, initialType: 'flashcard' })}><Plus size={17}/>Crear flashcard</button>
+          {canGenerate && <button className="button" onClick={() => openEditor('generate', { topic })}>Generar con IA</button>}
         </div>
       </div>
       {!!content.length && <a className="button" href={practicePath({ subject: subject.id, topic: topic.id, start: true })}>Practicar tema</a>}

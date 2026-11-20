@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import auth, library
+from . import auth, flashcards, library
 from .config import allowed_origins, connection, database_url, session_secret
 
 
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 app.include_router(auth.router)
 app.include_router(library.router)
+app.include_router(flashcards.router)
 
 
 @app.middleware("http")

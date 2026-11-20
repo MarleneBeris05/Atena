@@ -3,6 +3,7 @@ import Header, { routes } from './components/Header';
 import AccountDialog from './components/AccountDialog';
 import Dialog from './components/Dialog';
 import ReviewForm from './components/ReviewForm';
+import GenerateFlashcardsDialog from './components/GenerateFlashcardsDialog';
 import HomePage from './pages/HomePage';
 import LearningPage from './pages/LearningPage';
 import PracticePage from './pages/PracticePage';
@@ -207,7 +208,7 @@ function Workspace({ local, session, openAccount }) {
       {page === 'inicio' && <HomePage subjects={subjects} topics={topics} items={items} attempts={attempts}
         completed={completed} next={next} now={now} onCreate={() => openEditor({ type: 'subject' })}/>}
       {page === 'aprendizaje' && <LearningPage subjects={subjects} topics={topics} items={items} subject={subject}
-        topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor}/>}
+        topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor} canGenerate={!!session}/>}
       {page === 'repasos' && <PracticePage key={hash} subjects={subjects} topics={topics} items={items} plans={plans}
         completed={completed} query={query} onAttempt={recordAttempt} onComplete={completePlan}/>}
       {page === 'planes' && <PlansPage subjects={subjects} topics={topics} plans={plans} setPlans={setPlans}
@@ -222,9 +223,12 @@ function Workspace({ local, session, openAccount }) {
         : 'Tus datos se guardan en este navegador.'}</footer>
     </main>
     {toast && <div className="toast" role="status">{toast}</div>}
-    {editor && <Dialog title={editorTitles[editor.type]} onClose={closeEditor} busy={busy}>
+    {editor?.type === 'generate' ? <GenerateFlashcardsDialog topic={editor.topic} onGenerate={remote.generateFlashcards}
+      onSave={remote.saveFlashcards} onClose={closeEditor} onAccount={openAccount}/>
+    : editor && <Dialog title={editorTitles[editor.type]} onClose={closeEditor} busy={busy}>
       <fieldset className="form-controls" disabled={busy || (session && editor.type !== 'profile' && !remote.library)}>
-      {editor.type === 'item' ? <ReviewForm item={editor.item} topicId={editor.topic.id} onSave={values => runEditorAction(async () => {
+      {editor.type === 'item' ? <ReviewForm item={editor.item} topicId={editor.topic.id} initialType={editor.initialType}
+        onSave={values => runEditorAction(async () => {
         await saveEntry('reviews', editor.item, values);
         closeEditor();
         notify(session ? 'Contenido guardado en tu cuenta.' : 'Contenido guardado.');
