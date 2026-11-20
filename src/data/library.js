@@ -76,6 +76,20 @@ export function weeklyStats(attempts, completed, now) {
   };
 }
 
+export function mergeStudyAttempts(localAttempts, deviceEvents) {
+  if (!deviceEvents.length) return localAttempts;
+  const attempts = new Map(localAttempts.map(entry => [entry.id, entry]));
+  for (const event of deviceEvents) {
+    attempts.set(event.id, {
+      id: event.id, date: dateKey(new Date(event.studiedAt)), timestamp: event.studiedAt,
+      topicId: event.topicId, topicName: event.topicName, reviewId: event.cardId, reviewName: event.question,
+      type: 'flashcard', correct: event.rating === 'remembered',
+    });
+  }
+  const time = entry => new Date(entry.timestamp || entry.date + 'T00:00:00').getTime();
+  return [...attempts.values()].sort((a, b) => time(a) - time(b));
+}
+
 export function topicsToRevisit(topics, attempts) {
   return topics.map(topic => {
     const entries = attempts.filter(entry => entry.topicId === topic.id);

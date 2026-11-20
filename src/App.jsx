@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Header, { routes } from './components/Header';
 import AccountDialog from './components/AccountDialog';
 import Dialog from './components/Dialog';
@@ -12,9 +12,10 @@ import DevicePage from './pages/DevicePage';
 import useLocalStorage from './hooks/useLocalStorage';
 import useLocalLibrary, { associateAttempts, importPayload, mergeById, readLocal } from './hooks/useLocalLibrary';
 import useAccountLibrary from './hooks/useAccountLibrary';
+import useDeviceActivity from './hooks/useDeviceActivity';
 import { hasAccountApi, readSession, storeSession } from './data/api';
 import { dateKey } from './data/study';
-import { activityType, itemName, learningPath, nextOccurrence, subjectId, unassigned } from './data/library';
+import { activityType, itemName, learningPath, mergeStudyAttempts, nextOccurrence, subjectId, unassigned } from './data/library';
 
 const titles = {
   inicio: 'Inicio', aprendizaje: 'Aprendizaje', repasos: 'Repasos', planes: 'Planes', dispositivo: 'Dispositivo',
@@ -95,6 +96,8 @@ function Workspace({ local, session, openAccount }) {
   }, [toast]);
 
   const { page, ids, query, hash } = route;
+  const deviceActivity = useDeviceActivity(session?.token, page);
+  const allAttempts = useMemo(() => mergeStudyAttempts(attempts, deviceActivity.events), [attempts, deviceActivity.events]);
   const subjects = !savedSubjects.some(entry => entry.id === unassigned.id) && topics.some(topic => subjectId(topic) === unassigned.id)
     ? [...savedSubjects, unassigned] : savedSubjects;
   const subject = subjects.find(entry => entry.id === ids[0]);
@@ -205,21 +208,23 @@ function Workspace({ local, session, openAccount }) {
         {importStatus && <p role={importStatus.error ? 'alert' : 'status'}>{importStatus.message}</p>}
       </section>}
       <fieldset className="form-controls" disabled={importing}>
-      {page === 'inicio' && <HomePage subjects={subjects} topics={topics} items={items} attempts={attempts}
+      {page === 'inicio' && deviceActivity.error && <p role="status">La actividad del dispositivo está temporalmente inaccesible.</p>}
+      {page === 'inicio' && <HomePage subjects={subjects} topics={topics} items={items} attempts={allAttempts}
         completed={completed} next={next} now={now} onCreate={() => openEditor({ type: 'subject' })}/>}
       {page === 'aprendizaje' && <LearningPage subjects={subjects} topics={topics} items={items} subject={subject}
         topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor} canGenerate={!!session}/>}
       {page === 'repasos' && <PracticePage key={hash} subjects={subjects} topics={topics} items={items} plans={plans}
         completed={completed} query={query} onAttempt={recordAttempt} onComplete={completePlan}/>}
       {page === 'planes' && <PlansPage subjects={subjects} topics={topics} plans={plans} setPlans={setPlans}
-        attempts={attempts} completed={completed} now={now} notify={notify}/>}
-      {page === 'dispositivo' && <DevicePage items={items} device={device} onPrepare={() => {
+        attempts={allAttempts} completed={completed} now={now} notify={notify}/>}
+      {page === 'dispositivo' && <DevicePage items={items} subjects={subjects} topics={topics} token={session?.token}
+        activity={deviceActivity} device={device} onAccount={openAccount} onPrepare={() => {
         setDevice(previous => ({ ...previous, items, preparedAt: new Date().toISOString() }));
         notify('Material preparado en este navegador.');
       }}/>}
       </fieldset>
       </>}
-      <footer>{session ? 'Tu biblioteca se guarda en tu cuenta. Los planes y la actividad se guardan en este navegador.'
+      <footer>{session ? 'Tu cuenta guarda la biblioteca y los resultados del dispositivo. Los planes y la actividad web se guardan en este navegador.'
         : 'Tus datos se guardan en este navegador.'}</footer>
     </main>
     {toast && <div className="toast" role="status">{toast}</div>}

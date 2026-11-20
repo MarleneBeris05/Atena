@@ -242,6 +242,15 @@ fieldset { min-width: 0; border: 1px solid var(--border); margin: 0 0 14px; padd
 form .draft-check { display: flex; align-items: center; min-height: 44px; }
 .draft-check input { width: 18px; height: 18px; accent-color: var(--primary); }
 .draft-source { margin: 0 0 8px; padding: 8px 12px; border-left: 3px solid var(--border); white-space: pre-wrap; }
+.device-panels { display: grid; min-width: 0; gap: 16px; }
+.device-field, .device-form { display: grid; min-width: 0; margin: 14px 0; }
+.device-form { padding: 12px 0; border-top: 1px solid var(--border); justify-items: start; }
+.device-form label { width: 100%; }
+.device-form h3 { margin-bottom: 10px; }
+@media (min-width: 620px) {
+  .device-layout-account .device-panels { grid-column: 2; grid-row: 1; }
+  .device-layout-account .companion { grid-column: 1; grid-row: 1; }
+}
 .day-options { display: flex; flex-wrap: wrap; gap: 3px 12px; }
 .day-options label { display: flex; align-items: center; min-height: 44px; margin: 0; }
 .day-options input { width: 18px; height: 18px; accent-color: var(--primary); }
