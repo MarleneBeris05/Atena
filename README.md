@@ -56,3 +56,19 @@ Con la sesión abierta, **Aprendizaje → Importar biblioteca local** copia mate
 3. En el sitio estático, configura `VITE_API_URL` con la URL pública HTTPS de la API. Vite la incorpora durante `npm run build`, así que vuelve a desplegar el sitio si cambia.
 4. Comprueba que el paso `python -m alembic upgrade head` del predespliegue termina correctamente. En una instalación configurada manualmente, ejecuta ese mismo comando desde `backend` con `DATABASE_URL` apuntando a la base de destino. Render inicia Uvicorn en el `PORT` del servicio. [Guía de FastAPI en Render](https://render.com/docs/deploy-fastapi).
 5. Abre `/health` en la URL pública de la API. En el frontend desplegado, crea una materia, un tema y una flashcard de prueba. Recarga, entra desde un segundo navegador con la misma cuenta y comprueba que otra cuenta tiene su propia biblioteca.
+
+## Desplegar el frontend en Vercel
+
+La configuración de `vercel.json` fija Vite, Node.js 22 (mediante `package.json`), `npm ci`, `npm run build` y la salida `dist`. La interfaz y la lógica de la aplicación no requieren cambios. Las rutas actuales utilizan `#/...`, por lo que no necesitan reglas de reescritura.
+
+1. Importa el repositorio `MarleneBeris05/Atena` en Vercel y selecciona la raíz del repositorio como **Root Directory** (`.`). Conserva la configuración incluida en el repositorio.
+2. Para conectar cuentas, biblioteca remota y generación con IA, agrega **VITE_API_URL** en **Settings → Environment Variables**, con la URL pública HTTPS de la API existente (por ejemplo, `https://TU-API.onrender.com`, sin `/docs` ni `/health`). Selecciona Production y los entornos Preview que vayas a utilizar. Sin esta variable, se conserva el modo local de la app.
+3. Despliega. En la API de Render, agrega el origen exacto del frontend a **ALLOWED_ORIGINS**, por ejemplo `https://TU-PROYECTO.vercel.app`. Conserva los orígenes existentes separándolos con comas. Reinicia o vuelve a desplegar la API tras cambiar esa variable. Para un dominio personalizado o un Preview, agrega también su origen exacto; la API actual no admite comodines.
+4. Si cambia `VITE_API_URL`, vuelve a desplegar el frontend: Vite incorpora esta variable durante la compilación.
+5. Verifica `https://TU-API.onrender.com/health`, abre el frontend y prueba iniciar sesión, crear una tarjeta y recuperarla tras recargar. Las claves de Gemini, la conexión PostgreSQL y `SESSION_SECRET` permanecen exclusivamente en el backend.
+
+Este despliegue publica el frontend en Vercel y conserva FastAPI/PostgreSQL en Render, según la arquitectura existente. `.vercelignore` excluye el backend y los archivos locales de las subidas mediante CLI; el directorio servido por Vercel es únicamente `dist`. El almacenamiento local continúa asociado al navegador y al dominio: los datos de localhost no se trasladan automáticamente al nuevo dominio.
+
+Para desplegar por CLI, desde la raíz ejecuta `npx vercel` (Preview) o `npx vercel --prod` (Production) después de configurar las variables en el proyecto. Estos comandos publican el sitio; no son necesarios para validar la compilación local.
+
+Referencia: [Vite en Vercel](https://vercel.com/docs/frameworks/frontend/vite) y [configuración de vercel.json](https://vercel.com/docs/project-configuration/vercel-json).
