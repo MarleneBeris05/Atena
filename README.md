@@ -140,3 +140,11 @@ Este despliegue publica el frontend en Vercel y conserva FastAPI/PostgreSQL en R
 Para desplegar por CLI, desde la raíz ejecuta `npx vercel` (Preview) o `npx vercel --prod` (Production) después de configurar las variables en el proyecto. Estos comandos publican el sitio; no son necesarios para validar la compilación local.
 
 Referencia: [Vite en Vercel](https://vercel.com/docs/frameworks/frontend/vite) y [configuración de vercel.json](https://vercel.com/docs/project-configuration/vercel-json).
+
+### Empaquetado explícito para Vercel
+
+`vercel.json` ejecuta `node scripts/build-vercel.mjs`. Este script compila la misma app con Vite en `dist`, comprueba su punto de entrada y copia los archivos a `.vercel/output/static`, junto al manifiesto `.vercel/output/config.json` de Build Output API v3. Esta salida explícita evita depender de la resolución de `dist` del recolector estático. `npm run build` sigue siendo la compilación estándar para Render y para uso local.
+
+Para probar el empaquetado: `node scripts/build-vercel.mjs`. Sube también la carpeta `scripts` al repositorio, además de `vercel.json` y `.vercelignore`, y crea un despliegue del nuevo commit. Si el panel tiene una configuración antigua, establece Build Command en `node scripts/build-vercel.mjs` y Output Directory en `.vercel/output/static`, con Root Directory en la raíz. No subas las carpetas generadas `dist` o `.vercel` al repositorio.
+
+Referencia: https://vercel.com/docs/build-output-api
