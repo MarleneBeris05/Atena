@@ -117,6 +117,33 @@ La API devuelve `200 {"accepted":1,"duplicates":0}`. Reenviar el mismo evento de
 | `429` | `device_pair_limit`. Espera el intervalo indicado por `Retry-After`. |
 | `503` | `database_unavailable`. Conserva la cola y reintenta más tarde. |
 
+## Firmware Arduino y prueba en la placa
+
+Abre [firmware/Atena/Atena.ino](firmware/Atena/Atena.ino) en Arduino IDE 2. Instala **esp32 by Espressif Systems 3.3.12**, **ArduinoJson 7.4.3**, **Adafruit GFX 1.13.0**, **Adafruit ST7735 and ST7789 1.12.0**, **Adafruit BusIO 1.17.4** y **RTClib 2.1.4**. Selecciona **ESP32 Dev Module**, **Flash Size: 4MB (32Mb)**, **Partition Scheme: Custom** y **Core Debug Level: None**. Elige el puerto que aparezca al conectar tu placa y pulsa **Verificar** y **Subir**. El sketch contiene su propia tabla [partitions.csv](firmware/Atena/partitions.csv). Mantén el borrado completo de flash desactivado al actualizar una instalación que ya tenga mazos. [Particiones personalizadas de Arduino ESP32](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/partition_table.html).
+
+La compilación equivalente mediante Arduino CLI es:
+
+```powershell
+arduino-cli compile --fqbn esp32:esp32:esp32:FlashSize=4M,PartitionScheme=custom --build-property upload.maximum_size=1572864 --output-dir .validation/atena-dist firmware/Atena
+arduino-cli upload --fqbn esp32:esp32:esp32:FlashSize=4M,PartitionScheme=custom --port COMx --input-dir .validation/atena-dist firmware/Atena
+```
+
+El cableado del sketch usa `DC=16`, `RST=17`, `SCK=18`, `MOSI=23`, `CS=-1`, modo SPI 3, I²C del DS3231 `SDA=21` y `SCL=22`, batería `GPIO 35` y botones izquierda, Enter y derecha en `25`, `26` y `27` con `INPUT_PULLUP`. El porcentaje muestra `--%` mientras la lectura de batería siga sin verificar. El rayo requiere una señal de carga verificada.
+
+1. Abre el monitor serie a **115200 baudios** con fin de línea **Nueva línea**. En una instalación nueva, si aparece «LittleFS no montado», envía `FS INIT` para inicializarlo. El arranque monta LittleFS sin formatearlo.
+2. Envía `WIFI {"ssid":"mi-red","password":"mi-contraseña"}` una vez. Usa JSON al incluir comillas o barras en los valores. La configuración queda en NVS y las confirmaciones de la consola omiten el contenido. Atena enciende el Wi-Fi al seleccionar **Sincronizar**.
+3. Ajusta el DS3231 con `RTC AAAA-MM-DD HH:MM:SS` usando la hora local actual. Si corresponde, fija su desfase con `TZ -06:00`, el valor inicial para Ciudad de México. El RTC alimenta la barra, las fechas de estudio y la comprobación de vigencia del certificado TLS. El firmware usa `https://atena-api.onrender.com` y valida el nombre del servidor y su cadena con [GTS Root R4](https://pki.goog/repo/certs/gtsr4.pem).
+4. Crea una flashcard en **Aprendizaje**. Incluye `¿ÁÉÍÓÚ, ñ, ü?` en la pregunta y una respuesta de más de 152 caracteres para probar la paginación. En Atena, pulsa Enter desde los ojos, elige **Sincronizar** y escribe el código de la pantalla en **Dispositivo** de la web.
+5. En la web, selecciona el tema y pulsa **Preparar para mi Atena**. En la placa vuelve a **Sincronizar**. La web mostrará **Disponible sin conexión** cuando la placa verifique, active y confirme el mazo.
+6. Apaga el Wi-Fi y reinicia el ESP32. Pulsa Enter, elige **Flashcards** y abre la pregunta. Izquierda y derecha recorren las páginas. Enter revela la respuesta, y un segundo Enter abre la valoración. Elige **La recordé** o **Repasar**. Reinicia otra vez, recupera el Wi-Fi y sincroniza para comprobar que la valoración llega una sola vez a la web.
+7. Para probar un corte, publica una segunda versión con una respuesta distinta y corta el Wi-Fi durante **Sincronizando**. Reinicia y abre **Flashcards** para comprobar que aparece la respuesta anterior si la nueva descarga se interrumpió. Restablece el Wi-Fi y sincroniza de nuevo.
+
+El firmware escribe la descarga en un temporal, comprueba tamaño y SHA-256 y después activa el otro espacio del mazo con un registro de metadatos. Al arrancar valida ambos espacios y elige el válido más reciente. La cola conserva hasta 48 valoraciones y envía lotes de hasta 16. Elimina cada lote tras un HTTP `200` que contabilice todos sus eventos como aceptados o duplicados.
+
+La compilación para **ESP32 Dev Module de 4 MiB** produjo un binario de **1 186 624 bytes**. La tabla generada reserva **1 572 864 bytes** para la aplicación, con **386 240 bytes** libres, y **2 555 904 bytes** para LittleFS. El presupuesto de datos contempla dos mazos de **1 MiB**, **384 KiB** para los 48 archivos de resultados con margen por archivo y una reserva operativa de **32 KiB**. Quedan **32 KiB** adicionales en la partición de datos bajo ese presupuesto. El firmware consulta también el espacio libre antes de cada descarga.
+
+La fuente Adafruit GFX usa glifos CP437 y acentos dibujados para las vocales mayúsculas que los necesitan. Los símbolos fuera del repertorio compatible aparecen como `?`. La prueba nativa de UTF-8 y paginación se puede ejecutar con `g++ -std=c++17 firmware/tests/atena_text_test.cpp -o .validation/atena-text-test.exe` y luego `.\.validation\atena-text-test.exe`. La comprobación visual en el ST7789, la calibración de batería, el corte de alimentación y el recorrido de sincronización de la placa requieren prueba física.
+
 ## Desplegar en Render
 
 1. Usa [render.yaml](render.yaml) como Blueprint. Define un servicio FastAPI con Python 3.13 y un sitio estático. El archivo selecciona un plan de pago para la API. [Referencia de Blueprints](https://render.com/docs/blueprint-spec).
