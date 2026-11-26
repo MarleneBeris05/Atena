@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import Window from './Window';
 import { dateKey } from '../data/study';
+import { SpacedSession } from './SpacedPlans';
 
-export default function ActivityCalendar({ sessions, completed }) {
+export default function ActivityCalendar({ sessions, completed, spacedSessions = [] }) {
   const today = dateKey();
   const [month, setMonth] = useState(() => {
     const date = new Date();
@@ -12,8 +13,10 @@ export default function ActivityCalendar({ sessions, completed }) {
   const countByDate = entries => entries.reduce((all, entry) => all.set(entry.date, (all.get(entry.date) || 0) + 1), new Map());
   const counts = countByDate(sessions);
   const completions = countByDate(completed);
+  const spacedCounts = countByDate(spacedSessions);
   const activity = sessions.filter(entry => entry.date === selected);
   const finished = completed.filter(entry => entry.date === selected);
+  const reviews = spacedSessions.filter(entry => entry.date === selected).sort((a, b) => a.time.localeCompare(b.time));
   const offset = (month.getDay() + 6) % 7;
   const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const shiftMonth = difference => {
@@ -36,11 +39,14 @@ export default function ActivityCalendar({ sessions, completed }) {
         const date = dateKey(new Date(month.getFullYear(), month.getMonth(), index + 1));
         const count = counts.get(date) || 0;
         const finishedCount = completions.get(date) || 0;
-        return <button key={date} className={'calendar-day intensity-' + Math.min(count + finishedCount, 3)
+        const reviewCount = spacedCounts.get(date) || 0;
+        const total = count + finishedCount + reviewCount;
+        return <button key={date} className={'calendar-day intensity-' + Math.min(total, 3)
           + (date === today ? ' today' : '') + (date === selected ? ' selected' : '')}
-          aria-pressed={date === selected} aria-label={date + ': ' + count + ' intentos, ' + finishedCount + ' sesiones completadas'}
+          aria-pressed={date === selected} aria-label={date + ': ' + count + ' intentos, ' + finishedCount
+            + ' sesiones completadas, ' + reviewCount + ' repasos espaciados'}
           onClick={() => setSelected(date)}>
-          {index + 1}{count + finishedCount > 0 && <i/>}
+          {index + 1}{total > 0 && <i/>}
         </button>;
       })}
     </div>
@@ -51,6 +57,8 @@ export default function ActivityCalendar({ sessions, completed }) {
       {activity.length ? activity.map(entry => <p key={entry.id}>{entry.topicName} · {entry.reviewName}
         {entry.correct === false && ' · Para repasar'}</p>) : <p>Aún no hay intentos registrados este día.</p>}
       {finished.map(entry => <p key={entry.id}>Sesión programada completada{entry.planName && ' · ' + entry.planName}</p>)}
+      {reviews.length > 0 && <h3>Repasos espaciados</h3>}
+      {reviews.map(entry => <SpacedSession key={entry.id} session={entry}/>)}
     </div>
   </Window>;
 }

@@ -5,7 +5,7 @@ import Stats from '../components/Stats';
 import ActivityCalendar from '../components/ActivityCalendar';
 import { activities, activityType, learningPath, localTime, practicePath, subjectId, topicsToRevisit } from '../data/library';
 
-export default function HomePage({ subjects, topics, items, attempts, completed, next, now, onCreate }) {
+export default function HomePage({ subjects, topics, items, attempts, completed, spacedSessions, next, now, onCreate }) {
   const nextTopic = next && topics.find(topic => topic.id === next.plan.topicId);
   const nextSubject = nextTopic && subjects.find(subject => subject.id === subjectId(nextTopic));
   const lastAttempt = [...attempts].reverse().find(entry => topics.some(topic => topic.id === entry.topicId));
@@ -56,7 +56,7 @@ export default function HomePage({ subjects, topics, items, attempts, completed,
           {items.some(item => item.topicId === topic.id) && <a className="button" href={practicePath({ topic: topic.id, start: true })}>Practicar tema</a>}
         </article>)}
       </Window>
-      <ActivityCalendar sessions={attempts} completed={completed}/>
+      <ActivityCalendar sessions={attempts} completed={completed} spacedSessions={spacedSessions}/>
     </div>
   </div>;
 }

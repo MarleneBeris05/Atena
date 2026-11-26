@@ -2,6 +2,7 @@
 
 #include "AtenaStorage.h"
 #include "AtenaPomodoro.h"
+#include "AtenaAgenda.h"
 
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -22,6 +23,7 @@ class AtenaSync {
   const String& pairingCode() const { return code; }
   size_t pomodoroCount() const { return pomodoros.count; }
   PomodoroMinutes pomodoro(size_t index) const { return pomodoros.entries[index]; }
+  AtenaAgenda& agenda() { return reviewAgenda; }
 
  private:
   AtenaStorage& storage;
@@ -43,17 +45,21 @@ class AtenaSync {
     PomodoroMinutes entries[maxPomodoros];
   };
   SavedPomodoros pomodoros{};
+  AtenaAgenda reviewAgenda;
   String syncMessage;
 
   bool connectWiFi();
   bool sendEvents();
   bool confirm(const AtenaStorage::Deck& deck);
   bool download(uint32_t version, uint32_t bytes);
-  int jsonRequest(const char* method, const String& path, const String& auth, const String& body, JsonDocument& output);
+  int jsonRequest(const char* method, const String& path, const String& auth, const String& body,
+                  JsonDocument& output, size_t maximum = 4096);
   const char* startPairing();
   const char* synchronize();
   const char* synchronizeDeck(JsonDocument& manifest);
   bool synchronizePomodoros();
+  bool synchronizeAgenda();
+  bool sendReviewResults();
   void loadPomodoros();
   const char* finish(const char* message);
 };

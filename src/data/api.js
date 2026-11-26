@@ -44,6 +44,7 @@ export async function api(path, { token, method = 'GET', body, signal } = {}) {
   if (!response.ok || !data) {
     const error = new Error(messages[data?.detail] || 'La API no pudo completar la solicitud. Inténtalo de nuevo.');
     error.status = response.status;
+    error.detail = data?.detail;
     throw error;
   }
   return data;

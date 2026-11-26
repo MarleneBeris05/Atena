@@ -10,6 +10,7 @@
 #include "AtenaStorage.h"
 #include "AtenaSync.h"
 #include "AtenaText.h"
+#include "AtenaReviewClock.h"
 
 constexpr int TFT_DC = 16;
 constexpr int TFT_RST = 17;
@@ -55,7 +56,7 @@ AtenaSync sincronizador(storage);
 
 enum class Pantalla {
   Inicio, Menu, Pregunta, Respuesta, Valorar, Sincronizar, Vincular, Mensaje,
-  Pomodoros, PomodoroActivo, PomodoroFinal
+  Pomodoros, PomodoroActivo, PomodoroFinal, Agenda, AvisoRepaso, RepasoActivo, RepasoFinal
 };
 Pantalla pantalla = Pantalla::Inicio;
 Pantalla regreso = Pantalla::Menu;
@@ -68,6 +69,18 @@ const char* mensaje = "";
 PomodoroTimer temporizador;
 PomodoroTimer::Frame cuadroPomodoro{};
 size_t pomodoroElegido = 0;
+size_t repasoElegido = 0;
+size_t repasoActivo = 0;
+uint32_t utcAgenda = 0;
+uint32_t inicioRepaso = 0;
+uint32_t inicioRepasoUtc = 0;
+uint32_t finRepasoUtc = 0;
+uint32_t segundosRepaso = 0;
+bool resultadoGuardado = false;
+bool avisoVisible = false;
+uint32_t venceAviso = 0;
+char avisoAgenda[195] = {};
+uint8_t avisosPendientes[AtenaAgenda::maxSessions] = {};
 bool rtcDisponible = false;
 bool relojConfiable = false;
 int ultimoSegundo = -2;
@@ -300,8 +313,78 @@ void texto(const char* value, int y, int scale = 2, uint16_t color = ST77XX_WHIT
 }
 
 void opciones(const char* const* lista, int count) {
-  for (int i = 0; i < count; ++i) texto(lista[i], 74 + i * 31, 2, i == seleccion ? ST77XX_CYAN : ST77XX_WHITE);
+  for (int i = 0; i < count; ++i) texto(lista[i], count > 4 ? 65 + i * 27 : 74 + i * 31,
+                                       2, i == seleccion ? ST77XX_CYAN : ST77XX_WHITE);
   texto("< / > elegir   Enter confirmar", PIE_Y, 1, ST77XX_YELLOW);
+}
+
+int64_t diaLocal(uint32_t utc) {
+  return (static_cast<int64_t>(utc) + sincronizador.timezoneOffset() * 60) / 86400;
+}
+
+bool enAgenda(const AtenaAgenda::Entry& entry) {
+  return utcAgenda && !entry.result && diaLocal(entry.start) <= diaLocal(utcAgenda);
+}
+
+size_t indiceAgenda(size_t position) {
+  const auto& agenda = sincronizador.agenda();
+  for (size_t i = 0; i < agenda.size(); ++i) {
+    if (enAgenda(agenda.get(i)) && position-- == 0) return i;
+  }
+  return agenda.size();
+}
+
+size_t cantidadAgenda() {
+  const auto& agenda = sincronizador.agenda();
+  size_t count = 0;
+  for (size_t i = 0; i < agenda.size(); ++i) if (enAgenda(agenda.get(i))) ++count;
+  return count;
+}
+
+size_t siguienteAgenda() {
+  const auto& agenda = sincronizador.agenda();
+  size_t position = 0;
+  for (size_t i = 0; i < agenda.size(); ++i) {
+    const auto& entry = agenda.get(i);
+    if (!enAgenda(entry)) continue;
+    if (entry.start >= utcAgenda) return position;
+    ++position;
+  }
+  return 0;
+}
+
+void horaDeRepaso(uint32_t utc, char* output, size_t capacity) {
+  const time_t local = static_cast<time_t>(utc) + sincronizador.timezoneOffset() * 60;
+  tm date{};
+  gmtime_r(&local, &date);
+  strftime(output, capacity, "%H:%M", &date);
+}
+
+void dibujarAgendaInicio() {
+  tft.fillRect(0, CUERPO_Y, ANCHO, 72, ST77XX_BLACK);
+  const auto& agenda = sincronizador.agenda();
+  const size_t index = indiceAgenda(siguienteAgenda());
+  if (index >= agenda.size()) return;
+  const auto& entry = agenda.get(index);
+  char clock[6], line[200];
+  horaDeRepaso(entry.start, clock, sizeof(clock));
+  snprintf(line, sizeof(line), "%s, %s · %s", entry.start >= utcAgenda ? "Hoy" : "Pendiente", clock, entry.topic);
+  texto(line, CUERPO_Y + 7, 1, ST77XX_CYAN, 4);
+  if (cantidadAgenda() > 1) texto("Más repasos en Menú > Agenda", 87, 1, ST77XX_YELLOW);
+}
+
+void dibujarAvisoBreve() {
+  tft.fillRect(0, 210, ANCHO, 30, ST77XX_BLACK);
+  tft.drawFastHLine(0, 210, ANCHO, ST77XX_YELLOW);
+  texto(avisoAgenda, 214, 1, ST77XX_YELLOW, 2);
+}
+
+void dibujarTiempoRepaso() {
+  char tiempo[12];
+  snprintf(tiempo, sizeof(tiempo), "%02lu:%02lu", static_cast<unsigned long>(segundosRepaso / 60),
+           static_cast<unsigned long>(segundosRepaso % 60));
+  tft.fillRect(0, 129, ANCHO, 43, ST77XX_BLACK);
+  texto(tiempo, 129, 4);
 }
 
 void dibujarTiempoPomodoro() {
@@ -319,14 +402,53 @@ void dibujarPantalla() {
   switch (pantalla) {
     case Pantalla::Inicio:
       dibujarOjos();
+      dibujarAgendaInicio();
       texto("Enter: menú", PIE_Y, 1, ST77XX_YELLOW);
       break;
     case Pantalla::Menu: {
-      const char* lista[] = {"Flashcards", "Pomodoros", "Sincronizar", "Volver"};
+      const char* lista[] = {"Flashcards", "Pomodoros", "Agenda", "Sincronizar", "Volver"};
       texto("Menú", CUERPO_Y);
-      opciones(lista, 4);
+      opciones(lista, 5);
       break;
     }
+    case Pantalla::Agenda: {
+      texto("Agenda de repasos", CUERPO_Y, 2);
+      const auto& agenda = sincronizador.agenda();
+      const size_t index = indiceAgenda(repasoElegido);
+      if (index >= agenda.size()) {
+        texto(!utcAgenda ? "Ajusta el RTC por USB." :
+              repasoElegido == 0 ? "Sin repasos para hoy." : "Volver", 76, 2, ST77XX_WHITE, 3);
+        texto("Enter: volver", PIE_Y, 1, ST77XX_YELLOW);
+      } else {
+        const auto& entry = agenda.get(index);
+        char clock[6];
+        horaDeRepaso(entry.start, clock, sizeof(clock));
+        snprintf(encabezado, sizeof(encabezado), "%u/%u · %s · %u min", static_cast<unsigned>(repasoElegido + 1),
+                 static_cast<unsigned>(cantidadAgenda()), clock, entry.minutes);
+        texto(encabezado, 65, 1, ST77XX_CYAN);
+        texto(entry.topic, 89, 2, ST77XX_WHITE, 4);
+        texto(entry.start <= utcAgenda ? "Pendiente · Enter: abrir" : "Programado para hoy", 185, 1, ST77XX_CYAN);
+        texto("< / > elegir", PIE_Y, 1, ST77XX_YELLOW);
+      }
+      break;
+    }
+    case Pantalla::AvisoRepaso:
+      texto("Ya es hora de\nrepasar", CUERPO_Y, 2, ST77XX_CYAN, 2);
+      texto(sincronizador.agenda().get(repasoActivo).topic, 79, 1, ST77XX_WHITE, 3);
+      texto("Iniciar", 125, 2, seleccion == 0 ? ST77XX_CYAN : ST77XX_WHITE);
+      texto("Omitir", 161, 2, seleccion == 1 ? ST77XX_CYAN : ST77XX_WHITE);
+      texto("< / > elegir   Enter confirmar", PIE_Y, 1, ST77XX_YELLOW);
+      break;
+    case Pantalla::RepasoActivo:
+      texto("Repasando", CUERPO_Y, 2, ST77XX_CYAN);
+      texto(sincronizador.agenda().get(repasoActivo).topic, 64, 2, ST77XX_WHITE, 3);
+      dibujarTiempoRepaso();
+      break;
+    case Pantalla::RepasoFinal:
+      texto("Repaso finalizado", CUERPO_Y, 2, ST77XX_CYAN);
+      texto(resultadoGuardado ? "Resultado guardado" : "No se guardó el resultado", 90, 1);
+      texto(resultadoGuardado ? "Enter: volver al inicio" : "Enter: reintentar", PIE_Y, 1, ST77XX_YELLOW);
+      break;
     case Pantalla::Pomodoros: {
       texto("Pomodoros", CUERPO_Y);
       const size_t total = sincronizador.pomodoroCount();
@@ -400,6 +522,7 @@ void dibujarPantalla() {
       texto("Enter: volver", PIE_Y, 1, ST77XX_YELLOW);
       break;
   }
+  if (avisoVisible) dibujarAvisoBreve();
 }
 
 void mostrarMensaje(const char* text, Pantalla volver = Pantalla::Menu) {
@@ -436,6 +559,85 @@ void abrirMenu() {
   pantalla = Pantalla::Menu;
   seleccion = 0;
   dibujarPantalla();
+}
+
+void abrirRepaso(size_t index) {
+  repasoActivo = index;
+  seleccion = 0;
+  pantalla = Pantalla::AvisoRepaso;
+  avisoVisible = false;
+  dibujarPantalla();
+}
+
+void actualizarRepaso(uint32_t ahora) {
+  const auto& entry = sincronizador.agenda().get(repasoActivo);
+  const uint32_t remaining = reviewRemaining(inicioRepaso, ahora, entry.minutes);
+  if (remaining == segundosRepaso) return;
+  segundosRepaso = remaining;
+  if (remaining) {
+    dibujarTiempoRepaso();
+    return;
+  }
+  finRepasoUtc = max(static_cast<uint32_t>(horaUtc()), inicioRepasoUtc + entry.minutes * 60);
+  resultadoGuardado = sincronizador.agenda().finish(repasoActivo, AtenaAgenda::Completed, finRepasoUtc);
+  pantalla = Pantalla::RepasoFinal;
+  dibujarPantalla();
+}
+
+void revisarAvisos(uint32_t ahora) {
+  const uint32_t utc = horaUtc();
+  if (avisoVisible && vencido(ahora, venceAviso)) {
+    avisoVisible = false;
+    dibujarPantalla();
+  }
+  if (utc == utcAgenda) return;
+  const uint32_t previous = utcAgenda && utcAgenda < utc ? utcAgenda : utc - 1;
+  const bool nuevoDia = !utcAgenda || !utc || diaLocal(utcAgenda) != diaLocal(utc);
+  utcAgenda = utc;
+  if (pantalla == Pantalla::Inicio && nuevoDia) dibujarAgendaInicio();
+  if (!utc || pantalla == Pantalla::Vincular || pantalla == Pantalla::Sincronizar ||
+      pantalla == Pantalla::AvisoRepaso || pantalla == Pantalla::RepasoFinal) return;
+  auto& agenda = sincronizador.agenda();
+  for (size_t i = 0; i < agenda.size(); ++i) {
+    const auto& entry = agenda.get(i);
+    if (entry.result || (pantalla == Pantalla::RepasoActivo && i == repasoActivo)) {
+      avisosPendientes[i] = 0;
+      continue;
+    }
+    const uint8_t bit = reviewNotice(previous, utc, entry.start, entry.seen).bit;
+    if (utc >= entry.start) avisosPendientes[i] = bit;
+    else avisosPendientes[i] |= bit;
+  }
+  if (avisoVisible) return;
+  for (size_t i = 0; i < agenda.size(); ++i) {
+    const uint8_t bits = avisosPendientes[i];
+    if (!bits) continue;
+    const auto entry = agenda.get(i);
+    uint8_t bit = reviewDue;
+    uint8_t minutes = 0;
+    if (!(bits & reviewDue)) {
+      for (size_t j = 0; j < sizeof(reviewThresholds); ++j) {
+        if (!(bits & (1 << j))) continue;
+        bit = 1 << j;
+        minutes = reviewThresholds[j];
+        break;
+      }
+    }
+    if (!agenda.mark(i, bit)) continue;
+    avisosPendientes[i] &= ~bit;
+    if (bit == reviewDue && (pantalla == Pantalla::Inicio || pantalla == Pantalla::Menu ||
+                            pantalla == Pantalla::Agenda || pantalla == Pantalla::Pomodoros)) {
+      abrirRepaso(i);
+      return;
+    }
+    if (minutes) snprintf(avisoAgenda, sizeof(avisoAgenda), "En %u min: %s", minutes, entry.topic);
+    else snprintf(avisoAgenda, sizeof(avisoAgenda), "%s: %s",
+                  utc - entry.start < 60 ? "Ya es hora de repasar" : "Repaso pendiente", entry.topic);
+    avisoVisible = true;
+    venceAviso = ahora + 4000;
+    dibujarAvisoBreve();
+    return;
+  }
 }
 
 void iniciarPomodoro(uint32_t ahora) {
@@ -493,7 +695,7 @@ void accionBoton(int i, uint32_t ahora) {
       break;
     case Pantalla::Menu:
       if (i != 1) {
-        seleccion = (seleccion + (i == 0 ? 3 : 1)) % 4;
+        seleccion = (seleccion + (i == 0 ? 4 : 1)) % 5;
         dibujarPantalla();
       } else if (seleccion == 0) {
         tarjeta = 0;
@@ -503,6 +705,13 @@ void accionBoton(int i, uint32_t ahora) {
         pomodoroElegido = 0;
         dibujarPantalla();
       } else if (seleccion == 2) {
+        utcAgenda = horaUtc();
+        repasoElegido = siguienteAgenda();
+        pantalla = Pantalla::Agenda;
+        dibujarPantalla();
+      } else if (seleccion == 3) {
+        memset(avisosPendientes, 0, sizeof(avisosPendientes));
+        avisoVisible = false;
         pantalla = Pantalla::Sincronizar;
         dibujarPantalla();
         if (const char* resultado = sincronizador.start(horaUtc())) mostrarMensaje(resultado);
@@ -514,6 +723,45 @@ void accionBoton(int i, uint32_t ahora) {
         pantalla = Pantalla::Inicio;
         feliz = true;
         tFinFeliz = ahora + 2000;
+        dibujarPantalla();
+      }
+      break;
+    case Pantalla::Agenda: {
+      const size_t total = cantidadAgenda();
+      const size_t index = indiceAgenda(repasoElegido);
+      if (i != 1) {
+        repasoElegido = (repasoElegido + (i == 0 ? total : 1)) % (total + 1);
+        dibujarPantalla();
+      } else if (index >= sincronizador.agenda().size()) abrirMenu();
+      else if (sincronizador.agenda().get(index).start <= static_cast<uint32_t>(horaUtc())) abrirRepaso(index);
+      break;
+    }
+    case Pantalla::AvisoRepaso:
+      if (i != 1) {
+        seleccion = 1 - seleccion;
+        dibujarPantalla();
+      } else if (seleccion == 0) {
+        const auto& entry = sincronizador.agenda().get(repasoActivo);
+        inicioRepasoUtc = max(static_cast<uint32_t>(horaUtc()), entry.start);
+        inicioRepaso = ahora;
+        segundosRepaso = entry.minutes * 60;
+        pantalla = Pantalla::RepasoActivo;
+        dibujarPantalla();
+      } else {
+        if (!sincronizador.agenda().finish(repasoActivo, AtenaAgenda::Skipped, horaUtc())) {
+          mostrarMensaje("No se guardó. Vuelve a intentar.", Pantalla::AvisoRepaso);
+        } else {
+          pantalla = Pantalla::Inicio;
+          dibujarPantalla();
+        }
+      }
+      break;
+    case Pantalla::RepasoActivo:
+      break;
+    case Pantalla::RepasoFinal:
+      if (i == 1) {
+        if (resultadoGuardado) pantalla = Pantalla::Inicio;
+        else resultadoGuardado = sincronizador.agenda().finish(repasoActivo, AtenaAgenda::Completed, finRepasoUtc);
         dibujarPantalla();
       }
       break;
@@ -687,6 +935,8 @@ void setup() {
   rtcDisponible = rtc.begin();
   relojConfiable = rtcDisponible && !rtc.lostPower();
   sincronizador.begin();
+  utcAgenda = horaUtc();
+  if (utcAgenda) --utcAgenda;
   Serial.println("USB: WIFI con JSON, RTC AAAA-MM-DD HH:MM:SS, TZ -06:00.");
   if (!storage.ready()) Serial.println("LittleFS no montado. En una placa nueva usa FS INIT.");
   leerBateria();
@@ -709,7 +959,9 @@ void loop() {
     tUltimaLectura = ahora;
     if (rtcDisponible && relojConfiable && rtc.lostPower()) relojConfiable = false;
     actualizarBarraSuperior();
+    revisarAvisos(millis());
   }
+  if (pantalla == Pantalla::RepasoActivo) actualizarRepaso(millis());
   if ((pantalla == Pantalla::Inicio || pantalla == Pantalla::PomodoroActivo) && ahora - tUltimoFrame >= 33) {
     tUltimoFrame = ahora;
     if (pantalla == Pantalla::PomodoroActivo) actualizarPomodoro(ahora);

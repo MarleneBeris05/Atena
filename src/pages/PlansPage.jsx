@@ -5,7 +5,7 @@ import ActivityCalendar from '../components/ActivityCalendar';
 import { methods } from '../data/study';
 import { activities, days, localTime, nextOccurrence, planDays, subjectId } from '../data/library';
 
-export default function PlansPage({ subjects, topics, plans, setPlans, attempts, completed, now, notify }) {
+export default function PlansPage({ subjects, topics, plans, setPlans, attempts, completed, spacedSessions, now, notify }) {
   const [editing, setEditing] = useState(null);
   const plan = plans.find(entry => entry.id === editing);
   const topic = topics.find(entry => entry.id === plan?.topicId);
@@ -51,7 +51,7 @@ export default function PlansPage({ subjects, topics, plans, setPlans, attempts,
         })}
       </Window>
     </div>
-    <ActivityCalendar sessions={attempts} completed={completed}/>
+    <ActivityCalendar sessions={attempts} completed={completed} spacedSessions={spacedSessions}/>
   </div>;
 }
 

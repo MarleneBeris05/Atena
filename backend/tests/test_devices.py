@@ -1,9 +1,10 @@
 import hashlib
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 
 TEST_DATABASE = os.getenv("ATENA_TEST_DATABASE_URL")
@@ -144,6 +145,88 @@ class DeviceSyncTest(unittest.TestCase):
         self.assertEqual(self.client.get(sync, headers=esp.headers).json()["pomodoros"], [changed])
         self.assertEqual(self.client.delete(first, headers=self.owner).status_code, 204)
         self.assertEqual(self.client.get(sync, headers=esp.headers).json()["pomodoros"], [])
+
+    def test_spaced_agenda_preview_results_edit_and_cancel(self):
+        self.create_topic(self.owner, "topologias")
+        esp = Esp32(self.client, "Atena Agenda")
+        device = esp.claim(self.owner).json()["id"]
+        esp.connect()
+        path = "/spaced-plans"
+        sync = "/devices/sync/agenda"
+        zone = ZoneInfo("America/Mexico_City")
+        now = datetime.now(zone)
+        first = (now + timedelta(minutes=6)).replace(second=0, microsecond=0)
+        second = first + timedelta(days=1)
+        clock = lambda value: {"date": value.date().isoformat(), "time": value.strftime("%H:%M")}
+        payload = {"topicId": "topologias", "deviceId": device, "startDate": now.date().isoformat(),
+                   "examDate": (second + timedelta(days=3)).date().isoformat(), "timeZone": zone.key,
+                   "time": first.strftime("%H:%M"), "minutes": 1, "reason": "Examen de redes",
+                   "sessions": [clock(first), clock(second)]}
+        self.assertEqual(self.client.get(sync, headers=self.owner).status_code, 401)
+        self.assertEqual(self.client.get(path, headers=esp.headers).status_code, 401)
+        preview = self.client.post(path + "/preview", headers=self.owner, json=payload)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["sessions"][0]["date"], first.date().isoformat())
+        created = self.client.post(path, headers=self.owner, json=payload)
+        self.assertEqual(created.status_code, 201, created.text)
+        plan = created.json()["id"]
+        self.assertEqual(self.client.delete(f"{path}/{plan}", headers=self.other).status_code, 404)
+
+        def web_plans():
+            return self.client.get(path, headers=self.owner).json()["plans"]
+
+        def agenda():
+            response = self.client.get(sync, headers=esp.headers)
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json()
+
+        def confirm(revision):
+            return self.client.post(sync + "/confirm", headers=esp.headers, json={"revision": revision})
+
+        self.assertTrue(web_plans()[0]["pendingSync"])
+        conflict = self.client.post(path + "/preview", headers=self.owner, json=payload)
+        self.assertEqual(conflict.status_code, 422)
+        self.assertEqual(conflict.json()["detail"]["issues"][0]["field"], "sessions.0")
+        first_snapshot = agenda()
+        self.assertEqual(first_snapshot, agenda())
+        self.assertEqual(first_snapshot["sessions"][0]["start"], int(first.timestamp()))
+        self.assertEqual(first_snapshot["sessions"][0]["minutes"], 1)
+        self.assertEqual(confirm(first_snapshot["revision"] + 1).status_code, 409)
+        self.assertEqual(confirm(first_snapshot["revision"]).status_code, 200)
+        self.assertFalse(web_plans()[0]["pendingSync"])
+
+        result = {"id": first_snapshot["sessions"][0]["id"], "status": "completed",
+                  "finishedAt": (first + timedelta(minutes=1)).isoformat()}
+        for _ in range(2):
+            response = self.client.post(sync + "/results", headers=esp.headers, json={"results": [result]})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["acknowledged"], [result["id"]])
+        self.assertEqual(len(agenda()["sessions"]), 1)
+
+        moved = second + timedelta(days=1, hours=1)
+        edit = self.client.put(f"{path}/{plan}", headers=self.owner, json={
+            **payload, "reason": "Nuevo motivo", "sessions": [clock(moved)],
+        })
+        self.assertEqual(edit.status_code, 200, edit.text)
+        snapshot = agenda()
+        self.assertGreater(snapshot["revision"], first_snapshot["revision"])
+        self.assertEqual([(s["start"], s["minutes"]) for s in snapshot["sessions"]], [(int(moved.timestamp()), 1)])
+        history = web_plans()[0]["sessions"]
+        self.assertEqual([s["status"] for s in history], ["completed", "scheduled"])
+        self.assertEqual(history[0]["reason"], payload["reason"])
+        self.assertEqual(self.client.delete(f"{path}/{plan}", headers=self.owner).status_code, 204)
+        self.assertEqual(agenda()["sessions"], [])
+        self.assertTrue(web_plans()[0]["pendingSync"])
+        self.assertEqual(confirm(agenda()["revision"]).status_code, 200)
+        self.assertFalse(web_plans()[0]["pendingSync"])
+        self.assertEqual([s["status"] for s in web_plans()[0]["sessions"]], ["completed"])
+        replacement = self.client.post(path, headers=self.owner, json={**payload, "sessions": [clock(moved)]})
+        self.assertEqual(replacement.status_code, 201, replacement.text)
+        skip = {"id": agenda()["sessions"][0]["id"], "status": "skipped", "finishedAt": moved.isoformat()}
+        response = self.client.post(sync + "/results", headers=esp.headers, json={"results": [skip]})
+        self.assertEqual(response.json()["acknowledged"], [skip["id"]])
+        self.assertEqual(agenda()["sessions"], [])
+        self.assertIn("skipped", [s["status"] for p in web_plans() for s in p["sessions"]])
 
     def test_esp32_pair_publish_verify_confirm_and_retry_events(self):
         self.create_topic(self.owner, "topologias")
