@@ -54,7 +54,7 @@ button:disabled { cursor: default; opacity: .65; }
 .site-header nav {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, .82fr) minmax(0, 1.24fr) minmax(0, .96fr) minmax(0, .8fr) minmax(0, 1.18fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
 }
 .site-header nav a {
@@ -283,8 +283,7 @@ footer { margin-top: 22px; color: var(--muted); font-size: .8rem; }
 
 @media (min-width: 620px) {
   .site-header { padding-inline: 22px; gap: 12px; }
-  .site-header nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .site-header nav a { flex-direction: row; gap: 7px; font-size: .875rem; }
+  .site-header nav { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .avatar { display: grid; place-items: center; flex: none; width: 32px; height: 32px; background: var(--primary); color: white; }
   main { padding: 26px 22px 32px; }
   .window-body { padding: 18px; }
@@ -300,10 +299,14 @@ footer { margin-top: 22px; color: var(--muted); font-size: .8rem; }
   .content-row .actions { max-width: 240px; }
 }
 
+@media (min-width: 760px) {
+  .site-header nav a { flex-direction: row; gap: 7px; font-size: .875rem; }
+}
+
 @media (min-width: 1000px) {
   .site-header { grid-template-columns: minmax(130px, 1fr) minmax(0, auto) minmax(130px, 1fr); padding-inline: 32px; }
   .site-header nav { grid-column: 2; grid-row: 1; display: flex; gap: 5px; }
-  .site-header nav a { padding-inline: 13px; }
+  .site-header nav a { padding-inline: 9px; }
   .header-actions { grid-column: 3; }
   .library-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

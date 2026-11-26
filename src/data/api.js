@@ -14,6 +14,7 @@ const messages = {
   device_code_unavailable: 'El código caducó, ya se utilizó o es incorrecto. Pide uno nuevo al dispositivo.',
   device_empty_deck: 'Guarda al menos una flashcard en este tema para publicar el mazo.',
   device_deck_too_large: 'El mazo supera el límite de 500 tarjetas o 1 MiB. Divide el tema en dos mazos más pequeños.',
+  pomodoro_limit: 'Puedes guardar hasta 64 Pomodoros por cuenta. Elimina uno antes de crear otro.',
   generation_limit: 'La generación permite hasta 5 intentos cada 10 minutos. Espera antes de volver a intentarlo.',
   generation_not_configured: 'La generación con Gemini aún no está configurada. Puedes crear flashcards manualmente.',
   generation_timeout: 'Gemini tardó demasiado en responder. Puedes volver a intentarlo con estos apuntes.',

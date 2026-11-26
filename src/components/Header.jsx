@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gamepad2, House, Library, RotateCcw, CalendarDays, Monitor } from 'lucide-react';
+import { Gamepad2, House, Library, RotateCcw, CalendarDays, Monitor, Timer } from 'lucide-react';
 
 const sections = [
   [House, 'Inicio', 'inicio'],
@@ -7,6 +7,7 @@ const sections = [
   [RotateCcw, 'Repasos', 'repasos'],
   [CalendarDays, 'Planes', 'planes'],
   [Monitor, 'Dispositivo', 'dispositivo'],
+  [Timer, 'Pomodoros', 'pomodoros'],
 ];
 
 export const routes = sections.map(([, , route]) => route);

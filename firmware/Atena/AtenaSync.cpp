@@ -73,6 +73,7 @@ void AtenaSync::begin() {
   if (id.length() == 36 && tokenWithPrefix(credential, "atd_")) {
     deviceId = id;
     token = credential;
+    loadPomodoros();
   }
 }
 
@@ -123,10 +124,12 @@ int AtenaSync::jsonRequest(const char* method, const String& path, const String&
   if (body.length()) http.addHeader("Content-Type", "application/json");
   const int status = strcmp(method, "GET") == 0 ? http.GET() : http.POST(body);
   if (status != 200 && status != 201 && status != 202) return status;
-  if (http.getSize() > static_cast<int>(maxApiResponse)) return -1;
+  const int length = http.getSize();
+  if (length > static_cast<int>(maxApiResponse)) return -1;
   String response;
   LimitedSink sink(nullptr, &response, maxApiResponse);
-  if (http.writeToStream(&sink) < 0 || deserializeJson(output, response)) return -1;
+  if (http.writeToStream(&sink) < 0 || (length >= 0 && sink.count != static_cast<size_t>(length)) ||
+      deserializeJson(output, response)) return -1;
   return status;
 }
 
@@ -148,7 +151,7 @@ const char* AtenaSync::start(time_t utc) {
   if (utc <= 0) return "Ajusta el reloj por USB para verificar HTTPS.";
   const timeval timestamp{utc, 0};
   if (settimeofday(&timestamp, nullptr) != 0) return "No se pudo ajustar el reloj HTTPS.";
-  if (!connectWiFi()) return finish("Sin Wi-Fi. El mazo guardado sigue disponible.");
+  if (!connectWiFi()) return finish("Sin Wi-Fi. Puedes usar el contenido guardado.");
   if (token.length()) return finish(synchronize());
   const char* error = startPairing();
   return error ? finish(error) : nullptr;
@@ -197,7 +200,8 @@ const char* AtenaSync::poll(uint32_t now) {
   if (!settings.putString("device", stored)) return finish("No se pudo guardar la vinculación.");
   deviceId = id;
   token = credential;
-  return finish("Equipo vinculado. Publica un mazo y sincroniza.");
+  loadPomodoros();
+  return finish("Equipo vinculado. Elige Sincronizar para descargar tu contenido.");
 }
 
 bool AtenaSync::download(uint32_t version, uint32_t bytes) {
@@ -257,6 +261,44 @@ bool AtenaSync::sendEvents() {
   }
 }
 
+void AtenaSync::loadPomodoros() {
+  pomodoros = {};
+  SavedPomodoros previous{};
+  if (settings.getBytesLength("pomodorosV1") != sizeof(previous) ||
+      settings.getBytes("pomodorosV1", &previous, sizeof(previous)) != sizeof(previous) ||
+      previous.device[36] != '\0' || deviceId != previous.device || previous.count > maxPomodoros) return;
+  for (size_t i = 0; i < previous.count; ++i) {
+    const auto minutes = previous.entries[i];
+    if (!minutes.work || minutes.work > maxMinutes || !minutes.rest || minutes.rest > maxMinutes) return;
+  }
+  pomodoros = previous;
+}
+
+bool AtenaSync::synchronizePomodoros() {
+  JsonDocument response;
+  if (jsonRequest("GET", "/devices/sync/pomodoros", token, "", response) != 200 ||
+      (response["schemaVersion"] | 0) != 1) return false;
+  const JsonArrayConst entries = response["pomodoros"].as<JsonArrayConst>();
+  if (entries.isNull() || entries.size() > maxPomodoros) return false;
+
+  SavedPomodoros next{};
+  deviceId.toCharArray(next.device, sizeof(next.device));
+  for (JsonVariantConst entry : entries) {
+    if (!entry["workMinutes"].is<uint32_t>() || !entry["breakMinutes"].is<uint32_t>()) return false;
+    const uint32_t work = entry["workMinutes"].as<uint32_t>();
+    const uint32_t rest = entry["breakMinutes"].as<uint32_t>();
+    if (!work || work > maxMinutes || !rest || rest > maxMinutes) return false;
+    next.entries[next.count++] = {work, rest};
+  }
+  if (deviceId == pomodoros.device && next.count == pomodoros.count &&
+      memcmp(next.entries, pomodoros.entries, next.count * sizeof(PomodoroMinutes)) == 0) return true;
+
+  // Commit the complete validated list as one NVS value before using it in memory.
+  if (settings.putBytes("pomodorosV1", &next, sizeof(next)) != sizeof(next)) return false;
+  pomodoros = next;
+  return true;
+}
+
 const char* AtenaSync::synchronize() {
   JsonDocument manifest;
   const int status = jsonRequest("GET", "/devices/sync/manifest", token, "", manifest);
@@ -264,10 +306,18 @@ const char* AtenaSync::synchronize() {
     if (!settings.remove("device")) return "No se pudo actualizar la vinculación. Reintenta.";
     token = "";
     deviceId = "";
+    pomodoros = {};
     return "Vinculación revocada. Sincroniza para vincular otra vez.";
   }
-  if (status != 200) return "API HTTPS no disponible. Puedes estudiar el mazo guardado.";
+  if (status != 200) return "API HTTPS no disponible. Puedes usar el contenido guardado.";
 
+  const bool pomodorosSynced = synchronizePomodoros();
+  syncMessage = pomodorosSynced ? "Pomodoros listos.\n\n" : "Pomodoros: sin actualizar.\n";
+  syncMessage += synchronizeDeck(manifest);
+  return syncMessage.c_str();
+}
+
+const char* AtenaSync::synchronizeDeck(JsonDocument& manifest) {
   const auto& current = storage.current();
   const auto confirmed = manifest["confirmed"]["version"] | 0UL;
   if (current.version && current.deviceId == deviceId && confirmed != current.version && !confirm(current)) {
