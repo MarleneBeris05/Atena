@@ -79,7 +79,6 @@ function SpacedPlanForm({ plan, topic, token, onClose, onSaved }) {
     .map(({ date, time }) => ({ date, time })) || []);
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const initialDevice = devices?.some(device => device.id === form.deviceId) ? form.deviceId : devices?.[0]?.id || '';
   const values = { ...form, deviceId: initialDevice, minutes: Number(form.minutes) };
   useEffect(() => {
@@ -91,7 +90,6 @@ function SpacedPlanForm({ plan, topic, token, onClose, onSaved }) {
 
   function setField(field, value) {
     setForm(previous => ({ ...previous, [field]: value }));
-    setConfirmed(false);
     if (['startDate', 'examDate'].includes(field)) setPreview([]);
     if (field === 'time') setPreview(previous => previous.map(entry => ({ ...entry, time: value })));
     setErrors({});
@@ -109,16 +107,12 @@ function SpacedPlanForm({ plan, topic, token, onClose, onSaved }) {
     try {
       const response = await api(path, { token, method: saving && plan.id ? 'PUT' : 'POST', body });
       if (saving) onSaved();
-      else {
-        setPreview(response.sessions.map(({ date, time }) => ({ date, time })));
-        setConfirmed(true);
-      }
+      else setPreview(response.sessions.map(({ date, time }) => ({ date, time })));
     } catch (error) {
       const detail = error.detail;
       if (detail?.sessions) setPreview(detail.sessions);
       const issues = detail?.issues || (detail?.field ? [detail] : [{ field: 'form', message: error.message }]);
       setErrors(Object.fromEntries(issues.map(({ field, message }) => [field, message])));
-      setConfirmed(false);
     } finally {
       setBusy(false);
     }
@@ -154,7 +148,6 @@ function SpacedPlanForm({ plan, topic, token, onClose, onSaved }) {
         {preview.map((slot, index) => {
           function change(key, value) {
             setPreview(previous => previous.map((entry, row) => row === index ? { ...entry, [key]: value } : entry));
-            setConfirmed(false);
             setErrors({});
           }
           return <fieldset className="form-columns" key={index}>
@@ -171,7 +164,7 @@ function SpacedPlanForm({ plan, topic, token, onClose, onSaved }) {
       <div className="actions">
         <button className="button" disabled={!initialDevice} value="preview">{preview.length ? 'Validar vista previa' : 'Ver fechas sugeridas'}</button>
         {preview.length > 0 && <button className="button" value="regenerate" formNoValidate disabled={!initialDevice}>Regenerar fechas</button>}
-        <button className="button solid" value="save" disabled={!initialDevice || !confirmed}>Guardar plan</button>
+        {preview.length > 0 && <button className="button solid" value="save" disabled={!initialDevice}>Guardar plan</button>}
         <button type="button" className="button" onClick={onClose}>Cerrar formulario</button>
       </div>
     </fieldset>
