@@ -91,6 +91,48 @@ class DeviceSyncTest(unittest.TestCase):
     def publish(self, device_id, topic_id, headers=None):
         return self.client.post(f"/devices/{device_id}/decks", headers=headers or self.owner, json={"topicId": topic_id})
 
+    def test_pomodoro_crud_and_complete_device_snapshot(self):
+        path = "/pomodoros"
+        sync = "/devices/sync/pomodoros"
+        short = {"workMinutes": 1, "breakMinutes": 1}
+        regular = {"workMinutes": 25, "breakMinutes": 5}
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.assertEqual(self.client.get(sync, headers=self.owner).status_code, 401)
+        for invalid in (0, -1, 1.5, 1.0, True, "1", 2_147_483_648):
+            result = self.client.post(path, headers=self.owner, json={**short, "workMinutes": invalid})
+            self.assertEqual(result.status_code, 422)
+        self.assertEqual(self.client.post(path, headers=self.owner, json={"workMinutes": 1}).status_code, 422)
+
+        esp = Esp32(self.client, "Atena Pomodoros")
+        other = Esp32(self.client, "Atena de otra cuenta")
+        for unit, account in ((esp, self.owner), (other, self.other)):
+            self.assertEqual(unit.claim(account).status_code, 201)
+            unit.connect()
+        self.assertEqual(self.client.get(path, headers=esp.headers).status_code, 401)
+        self.assertEqual(self.client.get(sync, headers=esp.headers).json(), {"schemaVersion": 1, "pomodoros": []})
+
+        ids = []
+        for minutes in (short, regular):
+            created = self.client.post(path, headers=self.owner, json=minutes)
+            self.assertEqual(created.status_code, 201, created.text)
+            ids.append(created.json()["id"])
+        self.assertEqual(self.client.get(path, headers=self.owner).json()["pomodoros"],
+                         [{"id": ids[0], **short}, {"id": ids[1], **regular}])
+        snapshot = self.client.get(sync, headers=esp.headers)
+        self.assertEqual(snapshot.json(), {"schemaVersion": 1, "pomodoros": [short, regular]})
+        self.assertEqual(snapshot.headers["Cache-Control"], "no-store")
+        self.assertEqual(self.client.get(sync, headers=other.headers).json()["pomodoros"], [])
+
+        first, second = (f"{path}/{entry}" for entry in ids)
+        changed = {"workMinutes": 1, "breakMinutes": 2}
+        self.assertEqual(self.client.put(first, headers=self.other, json=changed).status_code, 404)
+        self.assertEqual(self.client.delete(second, headers=self.other).status_code, 404)
+        self.assertEqual(self.client.put(first, headers=self.owner, json=changed).json(), {"id": ids[0], **changed})
+        self.assertEqual(self.client.delete(second, headers=self.owner).status_code, 204)
+        self.assertEqual(self.client.get(sync, headers=esp.headers).json()["pomodoros"], [changed])
+        self.assertEqual(self.client.delete(first, headers=self.owner).status_code, 204)
+        self.assertEqual(self.client.get(sync, headers=esp.headers).json()["pomodoros"], [])
+
     def test_esp32_pair_publish_verify_confirm_and_retry_events(self):
         self.create_topic(self.owner, "topologias")
         self.create_topic(self.other, "solo-ajeno")

@@ -9,6 +9,7 @@ import LearningPage from './pages/LearningPage';
 import PracticePage from './pages/PracticePage';
 import PlansPage from './pages/PlansPage';
 import DevicePage from './pages/DevicePage';
+import PomodorosPage from './pages/PomodorosPage';
 import useLocalStorage from './hooks/useLocalStorage';
 import useLocalLibrary, { associateAttempts, importPayload, mergeById, readLocal } from './hooks/useLocalLibrary';
 import useAccountLibrary from './hooks/useAccountLibrary';
@@ -19,6 +20,7 @@ import { activityType, itemName, learningPath, mergeStudyAttempts, nextOccurrenc
 
 const titles = {
   inicio: 'Inicio', aprendizaje: 'Aprendizaje', repasos: 'Repasos', planes: 'Planes', dispositivo: 'Dispositivo',
+  pomodoros: 'Pomodoros',
 };
 
 function readRoute() {
@@ -196,12 +198,13 @@ function Workspace({ local, session, openAccount }) {
     <main id={page}>
       <h1 ref={heading} tabIndex={-1}>{titles[page]}</h1>
       {storageError && <p role="alert" className="storage-error">{storageError}</p>}
-      {remote.loading && <p role="status">Cargando la biblioteca de tu cuenta…</p>}
-      {remote.error && <div className="library-notice">
+      {page === 'pomodoros' && <PomodorosPage token={session?.token} onAccount={openAccount}/>}
+      {page !== 'pomodoros' && remote.loading && <p role="status">Cargando la biblioteca de tu cuenta…</p>}
+      {page !== 'pomodoros' && remote.error && <div className="library-notice">
         <p role="alert">{remote.error}</p>
         <button className="button" onClick={remote.retry}>Reintentar carga</button>
       </div>}
-      {(!session || remote.library) && <>
+      {page !== 'pomodoros' && (!session || remote.library) && <>
       {session && page === 'aprendizaje' && Object.values(local.library).some(entries => entries.length) && <section className="library-notice">
         <p>Hay una biblioteca en este navegador. Puedes copiarla a {session.account.email}.</p>
         <button className="button" disabled={importing} onClick={importLibrary}>{importing ? 'Importando…' : 'Importar biblioteca local'}</button>

@@ -53,7 +53,10 @@ RTC_DS3231 rtc;
 AtenaStorage storage;
 AtenaSync sincronizador(storage);
 
-enum class Pantalla { Inicio, Menu, Pregunta, Respuesta, Valorar, Sincronizar, Vincular, Mensaje };
+enum class Pantalla {
+  Inicio, Menu, Pregunta, Respuesta, Valorar, Sincronizar, Vincular, Mensaje,
+  Pomodoros, PomodoroActivo, PomodoroFinal
+};
 Pantalla pantalla = Pantalla::Inicio;
 Pantalla regreso = Pantalla::Menu;
 int seleccion = 0;
@@ -62,6 +65,9 @@ size_t pagina = 0;
 std::vector<uint32_t> offsetsPagina;
 AtenaStorage::Page textoPagina;
 const char* mensaje = "";
+PomodoroTimer temporizador;
+PomodoroTimer::Frame cuadroPomodoro{};
+size_t pomodoroElegido = 0;
 bool rtcDisponible = false;
 bool relojConfiable = false;
 int ultimoSegundo = -2;
@@ -206,32 +212,40 @@ void actualizarBarraSuperior() {
   tft.drawRGBBitmap(0, BARRA_Y, destino, ANCHO, BARRA_ALTO_FINAL);
 }
 
-void actualizarAnimacion(uint32_t ahora) {
+void actualizarAnimacion(uint32_t ahora, bool pomodoro, bool descanso) {
   if (vencido(ahora, tSiguienteMirada)) {
-    if (random(3) == 0) {
+    if (pomodoro) {
+      destinoX = destinoX < 0 ? 18 : -18;
+      destinoY = 0;
+      tSiguienteMirada = ahora + (descanso ? 4000 : 2300);
+    } else if (random(3) == 0) {
       destinoX = 0;
       destinoY = 0;
     } else {
       destinoX = random(-18, 19);
       destinoY = random(-8, 9);
     }
-    tSiguienteMirada = ahora + random(1500, 4000);
+    if (!pomodoro) tSiguienteMirada = ahora + random(1500, 4000);
   }
-  miraX += (destinoX - miraX) * 0.25f;
-  miraY += (destinoY - miraY) * 0.25f;
+  const float velocidad = descanso ? 0.045f : pomodoro ? 0.10f : 0.25f;
+  miraX += (destinoX - miraX) * velocidad;
+  miraY += (destinoY - miraY) * velocidad;
 
   if (!parpadeando && vencido(ahora, tSiguienteParpadeo)) {
     parpadeando = true;
     tInicioParpadeo = ahora;
   }
   if (parpadeando) {
-    const float t = (ahora - tInicioParpadeo) / static_cast<float>(DURACION_PARPADEO);
-    if (t >= 1.0f) {
+    const uint32_t transcurrido = ahora - tInicioParpadeo;
+    const uint32_t movimiento = descanso ? 180 : DURACION_PARPADEO / 2;
+    const uint32_t pausa = descanso ? 400 : 0;
+    const uint32_t duracion = 2 * movimiento + pausa;
+    if (transcurrido >= duracion) {
       parpadeando = false;
       altoOjo = ALTO_OJO;
-      tSiguienteParpadeo = ahora + random(2000, 5000);
+      tSiguienteParpadeo = ahora + (descanso ? random(4500, 7000) : random(2000, 5000));
     } else {
-      const float k = t < 0.5f ? t * 2 : (1 - t) * 2;
+      const float k = min(min(transcurrido, duracion - transcurrido), movimiento) / static_cast<float>(movimiento);
       altoOjo = ALTO_OJO - k * (ALTO_OJO - 6);
     }
   }
@@ -290,6 +304,15 @@ void opciones(const char* const* lista, int count) {
   texto("< / > elegir   Enter confirmar", PIE_Y, 1, ST77XX_YELLOW);
 }
 
+void dibujarTiempoPomodoro() {
+  char tiempo[24];
+  const auto segundos = cuadroPomodoro.remainingSeconds;
+  snprintf(tiempo, sizeof(tiempo), "%02llu:%02u", static_cast<unsigned long long>(segundos / 60),
+           static_cast<unsigned>(segundos % 60));
+  tft.fillRect(0, 54, ANCHO, 40, ST77XX_BLACK);
+  texto(tiempo, 54, strlen(tiempo) <= 9 ? 4 : 2);
+}
+
 void dibujarPantalla() {
   tft.fillRect(0, CUERPO_Y, ANCHO, ALTO - CUERPO_Y, ST77XX_BLACK);
   char encabezado[40];
@@ -299,9 +322,47 @@ void dibujarPantalla() {
       texto("Enter: menú", PIE_Y, 1, ST77XX_YELLOW);
       break;
     case Pantalla::Menu: {
-      const char* lista[] = {"Flashcards", "Sincronizar", "Volver"};
+      const char* lista[] = {"Flashcards", "Pomodoros", "Sincronizar", "Volver"};
       texto("Menú", CUERPO_Y);
-      opciones(lista, 3);
+      opciones(lista, 4);
+      break;
+    }
+    case Pantalla::Pomodoros: {
+      texto("Pomodoros", CUERPO_Y);
+      const size_t total = sincronizador.pomodoroCount();
+      if (total == 0) {
+        texto("Crea un Pomodoro\nen la web y\nsincroniza", 76, 2, ST77XX_WHITE, 3);
+        texto("Enter: volver", PIE_Y, 1, ST77XX_YELLOW);
+      } else if (pomodoroElegido == total) {
+        texto("Volver", 84, 2, ST77XX_CYAN);
+        texto("< / > elegir   Enter volver", PIE_Y, 1, ST77XX_YELLOW);
+      } else {
+        const auto minutos = sincronizador.pomodoro(pomodoroElegido);
+        snprintf(encabezado, sizeof(encabezado), "%u / %u", static_cast<unsigned>(pomodoroElegido + 1),
+                 static_cast<unsigned>(total));
+        texto(encabezado, 65, 1, ST77XX_CYAN);
+        texto("Trabajo", 87, 2);
+        snprintf(encabezado, sizeof(encabezado), "%lu min", static_cast<unsigned long>(minutos.work));
+        texto(encabezado, 110, 2, ST77XX_CYAN);
+        texto("Descanso", 143, 2);
+        snprintf(encabezado, sizeof(encabezado), "%lu min", static_cast<unsigned long>(minutos.rest));
+        texto(encabezado, 166, 2, ST77XX_CYAN);
+        texto("< / > elegir   Enter iniciar", PIE_Y, 1, ST77XX_YELLOW);
+      }
+      break;
+    }
+    case Pantalla::PomodoroActivo:
+      if (cuadroPomodoro.phase != PomodoroTimer::Phase::Alert) {
+        texto(cuadroPomodoro.phase == PomodoroTimer::Phase::Work ? "Trabajando" : "Descanso", CUERPO_Y, 2);
+        dibujarTiempoPomodoro();
+        if (cuadroPomodoro.greeting) texto("¡Vamos a concentrarnos!", 95, 1, ST77XX_CYAN);
+        dibujarOjos();
+      }
+      break;
+    case Pantalla::PomodoroFinal: {
+      const char* lista[] = {"Repetir Pomodoro", "Salir"};
+      texto("Pomodoro completo", CUERPO_Y);
+      opciones(lista, 2);
       break;
     }
     case Pantalla::Pregunta:
@@ -377,6 +438,48 @@ void abrirMenu() {
   dibujarPantalla();
 }
 
+void iniciarPomodoro(uint32_t ahora) {
+  temporizador.start(sincronizador.pomodoro(pomodoroElegido), ahora);
+  cuadroPomodoro = temporizador.update(ahora);
+  pantalla = Pantalla::PomodoroActivo;
+  feliz = false;
+  parpadeando = false;
+  altoOjo = ALTO_OJO;
+  tSiguienteMirada = ahora;
+  tSiguienteParpadeo = ahora + 2000;
+  dibujarPantalla();
+}
+
+void actualizarPomodoro(uint32_t ahora) {
+  const auto anterior = cuadroPomodoro;
+  cuadroPomodoro = temporizador.update(ahora);
+  if (cuadroPomodoro.phase == PomodoroTimer::Phase::Done) {
+    seleccion = 0;
+    pantalla = Pantalla::PomodoroFinal;
+    dibujarPantalla();
+    return;
+  }
+
+  const bool cambio = anterior.phase != cuadroPomodoro.phase;
+  if (cuadroPomodoro.phase == PomodoroTimer::Phase::Alert) {
+    const uint8_t previo = anterior.brightness;
+    const uint8_t brillo = cuadroPomodoro.brightness;
+    const uint16_t color = tft.color565(brillo, brillo, brillo);
+    if (cambio || tft.color565(previo, previo, previo) != color) {
+      tft.fillRect(0, CUERPO_Y, ANCHO, ALTO - CUERPO_Y, color);
+    }
+    return;
+  }
+
+  actualizarAnimacion(ahora, true, cuadroPomodoro.phase == PomodoroTimer::Phase::Rest);
+  if (cambio) dibujarPantalla();
+  else {
+    if (anterior.greeting && !cuadroPomodoro.greeting) tft.fillRect(0, 95, ANCHO, 15, ST77XX_BLACK);
+    if (anterior.remainingSeconds != cuadroPomodoro.remainingSeconds) dibujarTiempoPomodoro();
+    dibujarOjos();
+  }
+}
+
 void accionBoton(int i, uint32_t ahora) {
   switch (pantalla) {
     case Pantalla::Inicio:
@@ -390,12 +493,16 @@ void accionBoton(int i, uint32_t ahora) {
       break;
     case Pantalla::Menu:
       if (i != 1) {
-        seleccion = (seleccion + (i == 0 ? 2 : 1)) % 3;
+        seleccion = (seleccion + (i == 0 ? 3 : 1)) % 4;
         dibujarPantalla();
       } else if (seleccion == 0) {
         tarjeta = 0;
         abrirTexto(false);
       } else if (seleccion == 1) {
+        pantalla = Pantalla::Pomodoros;
+        pomodoroElegido = 0;
+        dibujarPantalla();
+      } else if (seleccion == 2) {
         pantalla = Pantalla::Sincronizar;
         dibujarPantalla();
         if (const char* resultado = sincronizador.start(horaUtc())) mostrarMensaje(resultado);
@@ -407,6 +514,29 @@ void accionBoton(int i, uint32_t ahora) {
         pantalla = Pantalla::Inicio;
         feliz = true;
         tFinFeliz = ahora + 2000;
+        dibujarPantalla();
+      }
+      break;
+    case Pantalla::Pomodoros: {
+      const size_t total = sincronizador.pomodoroCount();
+      if (i == 1) {
+        if (!total || pomodoroElegido == total) abrirMenu();
+        else iniciarPomodoro(ahora);
+      } else if (total) {
+        pomodoroElegido = (pomodoroElegido + (i == 0 ? total : 1)) % (total + 1);
+        dibujarPantalla();
+      }
+      break;
+    }
+    case Pantalla::PomodoroActivo:
+      break;
+    case Pantalla::PomodoroFinal:
+      if (i != 1) {
+        seleccion = 1 - seleccion;
+        dibujarPantalla();
+      } else if (seleccion == 0) iniciarPomodoro(ahora);
+      else {
+        pantalla = Pantalla::Pomodoros;
         dibujarPantalla();
       }
       break;
@@ -580,11 +710,14 @@ void loop() {
     if (rtcDisponible && relojConfiable && rtc.lostPower()) relojConfiable = false;
     actualizarBarraSuperior();
   }
-  if (pantalla == Pantalla::Inicio && ahora - tUltimoFrame >= 33) {
+  if ((pantalla == Pantalla::Inicio || pantalla == Pantalla::PomodoroActivo) && ahora - tUltimoFrame >= 33) {
     tUltimoFrame = ahora;
-    if (feliz && vencido(ahora, tFinFeliz)) feliz = false;
-    actualizarAnimacion(ahora);
-    dibujarOjos();
+    if (pantalla == Pantalla::PomodoroActivo) actualizarPomodoro(ahora);
+    else {
+      if (feliz && vencido(ahora, tFinFeliz)) feliz = false;
+      actualizarAnimacion(ahora, false, false);
+      dibujarOjos();
+    }
   }
   delay(1);
 }

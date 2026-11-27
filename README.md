@@ -144,6 +144,15 @@ La compilación para **ESP32 Dev Module de 4 MiB** produjo un binario de **1 186
 
 La fuente Adafruit GFX usa glifos CP437 y acentos dibujados para las vocales mayúsculas que los necesitan. Los símbolos fuera del repertorio compatible aparecen como `?`. La prueba nativa de UTF-8 y paginación se puede ejecutar con `g++ -std=c++17 firmware/tests/atena_text_test.cpp -o .validation/atena-text-test.exe` y luego `.\.validation\atena-text-test.exe`. La comprobación visual en el ST7789, la calibración de batería, el corte de alimentación y el recorrido de sincronización de la placa requieren prueba física.
 
+### Comprobar Pomodoros sin conexión
+
+1. Desde `backend`, apunta `DATABASE_URL` a la base del entorno de prueba y ejecuta `python -m alembic upgrade head` para aplicar `0004_pomodoros`. Arranca o despliega la API y la web de esa versión.
+2. Compila y carga el sketch con la configuración de ESP32 de arriba. Mantén desactivado el borrado completo de flash para conservar la vinculación y los mazos. El firmware usa la URL HTTPS definida en `firmware/Atena/AtenaSync.cpp`.
+3. En **Pomodoros**, inicia sesión y guarda `1/1` y `25/5` en minutos. Cada cuenta puede guardar hasta 64 configuraciones. En el ESP32 vinculado elige **Sincronizar** y espera el mensaje **Pomodoros listos.** Selecciona **Pomodoros** con los botones laterales y comprueba que aparecen ambas opciones.
+4. Desactiva la red Wi-Fi y reinicia la placa. Comprueba que las dos opciones siguen ahí. Pulsa Enter sobre `1/1`. El mensaje **¡Vamos a concentrarnos!** aparece al arrancar **Trabajando** con `01:00`. Al minuto entra en **Descanso** con `01:00`. Al terminar el segundo minuto, el área bajo la barra superior emite dos pulsos blancos suaves durante unos cinco segundos.
+5. Pulsa Enter sobre **Repetir Pomodoro** y confirma que vuelve a `01:00` en **Trabajando**. Completa el segundo ciclo y usa un botón lateral para seleccionar **Salir**. Comprueba que regresa a la lista. En esa lista, elige **Volver** y abre **Flashcards** para verificar que puedes estudiar el mazo guardado.
+6. Restablece la red, edita una configuración en la web y corta la conexión durante una descarga de Pomodoros. Si el ESP32 informa que la lista sigue sin actualizarse, reinicia y comprueba que conserva la versión anterior. Restablece Wi-Fi y repite **Sincronizar** para recibir la versión nueva.
+
 ## Desplegar en Render
 
 1. Usa [render.yaml](render.yaml) como Blueprint. Define un servicio FastAPI con Python 3.13 y un sitio estático. El archivo selecciona un plan de pago para la API. [Referencia de Blueprints](https://render.com/docs/blueprint-spec).
