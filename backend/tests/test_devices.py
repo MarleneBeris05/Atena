@@ -96,6 +96,16 @@ class DeviceSyncTest(unittest.TestCase):
         sync = "/devices/sync/pomodoros"
         short = {"workMinutes": 1, "breakMinutes": 1}
         regular = {"workMinutes": 25, "breakMinutes": 5}
+        origin = "https://atena.example.test"
+        for endpoint, method in ((path, "POST"), (f"{path}/1", "PUT"), (f"{path}/1", "DELETE")):
+            preflight = self.client.options(endpoint, headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": method,
+                "Access-Control-Request-Headers": "authorization,content-type",
+            })
+            self.assertEqual(preflight.status_code, 200)
+            self.assertEqual(preflight.headers["Access-Control-Allow-Origin"], origin)
+            self.assertIn(method, preflight.headers["Access-Control-Allow-Methods"])
         self.assertEqual(self.client.get(path).status_code, 401)
         self.assertEqual(self.client.get(sync, headers=self.owner).status_code, 401)
         for invalid in (0, -1, 1.5, 1.0, True, "1", 2_147_483_648):
@@ -116,7 +126,9 @@ class DeviceSyncTest(unittest.TestCase):
             created = self.client.post(path, headers=self.owner, json=minutes)
             self.assertEqual(created.status_code, 201, created.text)
             ids.append(created.json()["id"])
-        self.assertEqual(self.client.get(path, headers=self.owner).json()["pomodoros"],
+        account_list = self.client.get(path, headers={**self.owner, "Origin": origin})
+        self.assertEqual(account_list.headers["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(account_list.json()["pomodoros"],
                          [{"id": ids[0], **short}, {"id": ids[1], **regular}])
         snapshot = self.client.get(sync, headers=esp.headers)
         self.assertEqual(snapshot.json(), {"schemaVersion": 1, "pomodoros": [short, regular]})
