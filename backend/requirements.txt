@@ -4,3 +4,4 @@ psycopg[binary]==3.2.9
 alembic==1.16.2
 argon2-cffi==25.1.0
 google-genai==3.6.1
+tzdata==2026.6

@@ -2,9 +2,10 @@ import React from 'react';
 import { Library, Plus } from 'lucide-react';
 import Window from '../components/Window';
 import Flashcard from '../components/Flashcard';
+import SpacedPlans from '../components/SpacedPlans';
 import { activities, activityType, itemName, learningPath, practicePath, subjectId, unassigned } from '../data/library';
 
-export default function LearningPage({ subjects, topics, items, subject, topic, invalid, onEdit, canGenerate }) {
+export default function LearningPage({ subjects, topics, items, subject, topic, invalid, onEdit, canGenerate, token, spaced }) {
   const visibleSubjects = subjects.filter(entry => entry.id !== unassigned.id || topics.some(t => subjectId(t) === entry.id));
   const relevantTopics = subject ? topics.filter(t => subjectId(t) === subject.id) : [];
   const content = topic ? items.filter(item => item.topicId === topic.id) : [];
@@ -21,7 +22,7 @@ export default function LearningPage({ subjects, topics, items, subject, topic, 
     {invalid ? <Window title="Aprendizaje">
       <h2 className="section-title">Este contenido ya no está en esa ruta</h2>
       <a className="button" href={learningPath(subject?.id)}>Volver a {subject?.name || 'Aprendizaje'}</a>
-    </Window> : topic ? <Window title="Tema">
+    </Window> : topic ? <div className="page-stack"><Window title="Tema">
       <div className="section-heading">
         <div><h2>{topic.name}</h2>{topic.description && <p>{topic.description}</p>}</div>
         <div className="actions">
@@ -49,7 +50,7 @@ export default function LearningPage({ subjects, topics, items, subject, topic, 
             </div>
           </article>)}
         </section>)}
-    </Window> : subject ? <Window title="Materia">
+    </Window><SpacedPlans key={topic.id} topic={topic} token={token} data={spaced}/></div> : subject ? <Window title="Materia">
       <div className="section-heading">
         <div><h2>{subject.name}</h2>{subject.description && <p>{subject.description}</p>}</div>
         <div className="actions">

@@ -9,7 +9,6 @@
 
 namespace {
 constexpr const char* api = "https://atena-api.onrender.com";
-constexpr size_t maxApiResponse = 4096;
 constexpr unsigned batchSize = 16;
 
 class LimitedSink : public Stream {
@@ -74,6 +73,7 @@ void AtenaSync::begin() {
     deviceId = id;
     token = credential;
     loadPomodoros();
+    reviewAgenda.begin(deviceId);
   }
 }
 
@@ -117,7 +117,7 @@ bool AtenaSync::connectWiFi() {
 }
 
 int AtenaSync::jsonRequest(const char* method, const String& path, const String& auth, const String& body,
-                           JsonDocument& output) {
+                           JsonDocument& output, size_t maximum) {
   WiFiClientSecure client;
   HTTPClient http;
   if (!openRequest(http, client, path, auth)) return -1;
@@ -125,9 +125,9 @@ int AtenaSync::jsonRequest(const char* method, const String& path, const String&
   const int status = strcmp(method, "GET") == 0 ? http.GET() : http.POST(body);
   if (status != 200 && status != 201 && status != 202) return status;
   const int length = http.getSize();
-  if (length > static_cast<int>(maxApiResponse)) return -1;
+  if (length > static_cast<int>(maximum)) return -1;
   String response;
-  LimitedSink sink(nullptr, &response, maxApiResponse);
+  LimitedSink sink(nullptr, &response, maximum);
   if (http.writeToStream(&sink) < 0 || (length >= 0 && sink.count != static_cast<size_t>(length)) ||
       deserializeJson(output, response)) return -1;
   return status;
@@ -201,6 +201,7 @@ const char* AtenaSync::poll(uint32_t now) {
   deviceId = id;
   token = credential;
   loadPomodoros();
+  reviewAgenda.begin(deviceId);
   return finish("Equipo vinculado. Elige Sincronizar para descargar tu contenido.");
 }
 
@@ -299,6 +300,51 @@ bool AtenaSync::synchronizePomodoros() {
   return true;
 }
 
+bool AtenaSync::sendReviewResults() {
+  size_t cursor = 0;
+  while (cursor < reviewAgenda.size()) {
+    JsonDocument payload, response;
+    JsonArray results = payload["results"].to<JsonArray>();
+    while (cursor < reviewAgenda.size() && results.size() < 12) {
+      const auto& entry = reviewAgenda.get(cursor++);
+      if (!entry.result) continue;
+      const time_t finished = entry.finished;
+      tm utc{};
+      char iso[25];
+      if (!gmtime_r(&finished, &utc) || !strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &utc)) return false;
+      JsonObject result = results.add<JsonObject>();
+      result["id"] = entry.id;
+      result["status"] = entry.result == AtenaAgenda::Completed ? "completed" : "skipped";
+      result["finishedAt"] = String(iso);
+    }
+    if (!results.size()) continue;
+    String body;
+    if (payload.overflowed() || !serializeJson(payload, body) ||
+        jsonRequest("POST", "/devices/sync/agenda/results", token, body, response) != 200) return false;
+    const JsonArrayConst acknowledged = response["acknowledged"].as<JsonArrayConst>();
+    if (acknowledged.size() != results.size()) return false;
+    for (size_t i = 0; i < acknowledged.size(); ++i) {
+      if (strcmp(acknowledged[i] | "", results[i]["id"] | "") != 0) return false;
+    }
+  }
+  return true;
+}
+
+bool AtenaSync::synchronizeAgenda() {
+  if (!sendReviewResults()) return false;
+  uint32_t revision;
+  {
+    JsonDocument response;
+    if (jsonRequest("GET", "/devices/sync/agenda", token, "", response, AtenaAgenda::maxResponse) != 200 ||
+        !reviewAgenda.install(response, deviceId)) return false;
+    revision = response["revision"].as<uint32_t>();
+  }
+  JsonDocument response;
+  const String body = String("{\"revision\":") + revision + "}";
+  return jsonRequest("POST", "/devices/sync/agenda/confirm", token, body, response) == 200 &&
+      (response["revision"] | UINT32_MAX) == revision;
+}
+
 const char* AtenaSync::synchronize() {
   JsonDocument manifest;
   const int status = jsonRequest("GET", "/devices/sync/manifest", token, "", manifest);
@@ -307,12 +353,15 @@ const char* AtenaSync::synchronize() {
     token = "";
     deviceId = "";
     pomodoros = {};
+    reviewAgenda.begin("");
     return "Vinculación revocada. Sincroniza para vincular otra vez.";
   }
   if (status != 200) return "API HTTPS no disponible. Puedes usar el contenido guardado.";
 
   const bool pomodorosSynced = synchronizePomodoros();
-  syncMessage = pomodorosSynced ? "Pomodoros listos.\n\n" : "Pomodoros: sin actualizar.\n";
+  const bool agendaSynced = synchronizeAgenda();
+  syncMessage = agendaSynced ? "Agenda lista.\n" : "Agenda pendiente.\n";
+  syncMessage += pomodorosSynced ? "Pomodoros listos.\n" : "Pomodoros: sin actualizar.\n";
   syncMessage += synchronizeDeck(manifest);
   return syncMessage.c_str();
 }

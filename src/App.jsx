@@ -14,6 +14,7 @@ import useLocalStorage from './hooks/useLocalStorage';
 import useLocalLibrary, { associateAttempts, importPayload, mergeById, readLocal } from './hooks/useLocalLibrary';
 import useAccountLibrary from './hooks/useAccountLibrary';
 import useDeviceActivity from './hooks/useDeviceActivity';
+import useSpacedPlans from './hooks/useSpacedPlans';
 import { hasAccountApi, readSession, storeSession } from './data/api';
 import { dateKey } from './data/study';
 import { activityType, itemName, learningPath, mergeStudyAttempts, nextOccurrence, subjectId, unassigned } from './data/library';
@@ -99,6 +100,10 @@ function Workspace({ local, session, openAccount }) {
 
   const { page, ids, query, hash } = route;
   const deviceActivity = useDeviceActivity(session?.token, page);
+  const spaced = useSpacedPlans(session?.token, page);
+  const spacedSessions = spaced.plans?.flatMap(plan => plan.sessions.map(entry => ({
+    ...entry, subjectName: plan.subjectName, topicName: plan.topicName, pendingSync: plan.pendingSync,
+  }))) || [];
   const allAttempts = useMemo(() => mergeStudyAttempts(attempts, deviceActivity.events), [attempts, deviceActivity.events]);
   const subjects = !savedSubjects.some(entry => entry.id === unassigned.id) && topics.some(topic => subjectId(topic) === unassigned.id)
     ? [...savedSubjects, unassigned] : savedSubjects;
@@ -212,14 +217,16 @@ function Workspace({ local, session, openAccount }) {
       </section>}
       <fieldset className="form-controls" disabled={importing}>
       {page === 'inicio' && deviceActivity.error && <p role="status">La actividad del dispositivo está temporalmente inaccesible.</p>}
+      {['inicio', 'planes'].includes(page) && spaced.error && <p role="status">La agenda de repasos está temporalmente inaccesible.</p>}
       {page === 'inicio' && <HomePage subjects={subjects} topics={topics} items={items} attempts={allAttempts}
-        completed={completed} next={next} now={now} onCreate={() => openEditor({ type: 'subject' })}/>}
+        completed={completed} spacedSessions={spacedSessions} next={next} now={now} onCreate={() => openEditor({ type: 'subject' })}/>}
       {page === 'aprendizaje' && <LearningPage subjects={subjects} topics={topics} items={items} subject={subject}
-        topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor} canGenerate={!!session}/>}
+        topic={topic} invalid={(ids[0] && !subject) || (ids[1] && !topic)} onEdit={openEditor} canGenerate={!!session}
+        token={session?.token} spaced={spaced}/>}
       {page === 'repasos' && <PracticePage key={hash} subjects={subjects} topics={topics} items={items} plans={plans}
         completed={completed} query={query} onAttempt={recordAttempt} onComplete={completePlan}/>}
       {page === 'planes' && <PlansPage subjects={subjects} topics={topics} plans={plans} setPlans={setPlans}
-        attempts={allAttempts} completed={completed} now={now} notify={notify}/>}
+        attempts={allAttempts} completed={completed} spacedSessions={spacedSessions} now={now} notify={notify}/>}
       {page === 'dispositivo' && <DevicePage items={items} subjects={subjects} topics={topics} token={session?.token}
         activity={deviceActivity} device={device} onAccount={openAccount} onPrepare={() => {
         setDevice(previous => ({ ...previous, items, preparedAt: new Date().toISOString() }));
